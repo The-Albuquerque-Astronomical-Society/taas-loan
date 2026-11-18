@@ -117,6 +117,50 @@ class TAAS_VRI_Importer {
 	}
 
 	/**
+	 * Vik Rent Items categories with their description and picture.
+	 *
+	 * @return array[]
+	 */
+	private static function get_category_details() {
+		global $wpdb;
+		$table = self::table( 'categories' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is built from $wpdb->prefix.
+		return (array) $wpdb->get_results( "SELECT id, name, descr, img FROM `{$table}` ORDER BY ordering, id", ARRAY_A );
+	}
+
+	/**
+	 * Give categories their Vik Rent Items description and picture, if they don't have one yet.
+	 *
+	 * @param array $term_cache Name => term ID cache.
+	 * @param array $report     Report to add to.
+	 */
+	private static function import_category_details( array &$term_cache, array &$report ) {
+		foreach ( self::get_category_details() as $row ) {
+			$term_id = self::get_term_id( $row['name'], $term_cache );
+			if ( ! $term_id ) {
+				continue;
+			}
+			$term  = get_term( $term_id, self::TAXONOMY );
+			$descr = trim( (string) $row['descr'] );
+			if ( $term && ! is_wp_error( $term ) && '' === trim( $term->description ) && '' !== $descr ) {
+				wp_update_term( $term_id, self::TAXONOMY, array( 'description' => wp_kses_post( $descr ) ) );
+			}
+			if ( ! get_term_meta( $term_id, TAAS_Loan_Shortcodes::TERM_IMAGE, true ) ) {
+				$path = self::image_path( $row['img'] );
+				if ( $path ) {
+					$attachment_id = self::attach_image( $path, 0, $row['name'] );
+					if ( is_wp_error( $attachment_id ) ) {
+						$report['errors'][] = $row['name'] . ': ' . $attachment_id->get_error_message();
+					} else {
+						update_term_meta( $term_id, TAAS_Loan_Shortcodes::TERM_IMAGE, (int) $attachment_id );
+						++$report['images'];
+					}
+				}
+			}
+		}
+	}
+
+	/**
 	 * Vik Rent Items items.
 	 *
 	 * @return array[]
@@ -250,6 +294,7 @@ class TAAS_VRI_Importer {
 			'total'          => 0,
 			'created'        => array(),
 			'repaired'       => array(),
+			'updated'        => array(),
 			'renamed'        => array(),
 			'skipped'        => array(),
 			'missing_images' => array(),
@@ -278,6 +323,20 @@ class TAAS_VRI_Importer {
 		if ( ! $dry_run && 0 === (int) $offset ) {
 			foreach ( $categories as $category_name ) {
 				self::get_term_id( $category_name, $term_cache );
+			}
+			self::import_category_details( $term_cache, $report );
+		} elseif ( $dry_run && 0 === (int) $offset ) {
+			foreach ( self::get_category_details() as $row ) {
+				$term = get_term_by( 'name', $row['name'], self::TAXONOMY );
+				if ( ! $term ) {
+					continue;
+				}
+				$needs_descr = '' === trim( $term->description ) && '' !== trim( (string) $row['descr'] );
+				$needs_image = ! get_term_meta( $term->term_id, TAAS_Loan_Shortcodes::TERM_IMAGE, true ) && self::image_path( $row['img'] );
+				if ( $needs_descr || $needs_image ) {
+					/* translators: %s: category name. */
+					$report['updated'][] = sprintf( __( 'Category: %s', 'sharing-club' ), $row['name'] );
+				}
 			}
 		}
 
@@ -310,6 +369,23 @@ class TAAS_VRI_Importer {
 					);
 				}
 				$report['renamed'][] = $name . ' → ' . $new_title;
+			}
+
+			// Fill in a missing short description (added in a later version).
+			if ( $existing && '' !== trim( (string) $item['shortdesc'] ) ) {
+				$needs_short = false;
+				foreach ( $existing as $post_id ) {
+					if ( '' === (string) get_post_meta( $post_id, TAAS_Loan_Shortcodes::SHORT_DESC, true ) ) {
+						$needs_short = true;
+						if ( ! $dry_run ) {
+							update_post_meta( $post_id, TAAS_Loan_Shortcodes::SHORT_DESC, wp_kses_post( trim( (string) $item['shortdesc'] ) ) );
+						}
+					}
+				}
+				if ( $needs_short ) {
+					/* translators: %s: item name. */
+					$report['updated'][] = sprintf( __( '%s: short description', 'sharing-club' ), $name );
+				}
 			}
 
 			// Fill in a missing picture, e.g. after an import was cut off half way.
@@ -524,6 +600,10 @@ class TAAS_VRI_Importer {
 		if ( ! is_wp_error( $post_id ) ) {
 			update_post_meta( $post_id, self::META_KEY, (int) $item['id'] );
 			update_post_meta( $post_id, self::UNIT_KEY, (int) $unit );
+			$short = trim( (string) $item['shortdesc'] );
+			if ( '' !== $short ) {
+				update_post_meta( $post_id, TAAS_Loan_Shortcodes::SHORT_DESC, wp_kses_post( $short ) );
+			}
 		}
 		return $post_id;
 	}
@@ -654,7 +734,7 @@ class TAAS_VRI_Importer {
 		if ( ! is_array( $report ) ) {
 			$report = $batch;
 		} else {
-			foreach ( array( 'created', 'repaired', 'renamed', 'skipped', 'missing_images', 'errors' ) as $list ) {
+			foreach ( array( 'created', 'repaired', 'updated', 'renamed', 'skipped', 'missing_images', 'errors' ) as $list ) {
 				$report[ $list ] = array_merge( $report[ $list ], $batch[ $list ] );
 			}
 			$report['images'] += $batch['images'];
@@ -716,7 +796,7 @@ class TAAS_VRI_Importer {
 		echo '<h2>' . esc_html__( 'Preview', 'sharing-club' ) . '</h2>';
 		self::render_report( $preview );
 
-		if ( $preview['created'] || $preview['repaired'] ) {
+		if ( $preview['created'] || $preview['repaired'] || $preview['updated'] ) {
 			echo '<p class="submit"><button type="button" id="taas-vri-start" class="button button-primary">';
 			if ( $preview['created'] ) {
 				printf(
@@ -725,7 +805,7 @@ class TAAS_VRI_Importer {
 					count( $preview['created'] )
 				);
 			} else {
-				esc_html_e( 'Add missing pictures', 'sharing-club' );
+				esc_html_e( 'Update existing items', 'sharing-club' );
 			}
 			echo '</button></p>';
 			echo '<div id="taas-vri-progress" class="notice notice-info inline" hidden><p></p></div>';
@@ -746,6 +826,7 @@ class TAAS_VRI_Importer {
 		$sections = array(
 			'created'        => $report['dry_run'] ? __( 'Will be imported', 'sharing-club' ) : __( 'Imported', 'sharing-club' ),
 			'repaired'       => $report['dry_run'] ? __( 'Existing items that will get their missing picture', 'sharing-club' ) : __( 'Existing items that got their missing picture', 'sharing-club' ),
+			'updated'        => $report['dry_run'] ? __( 'Details that will be filled in', 'sharing-club' ) : __( 'Details filled in', 'sharing-club' ),
 			'renamed'        => $report['dry_run'] ? __( 'Will be renamed (now has more than one unit)', 'sharing-club' ) : __( 'Renamed (now has more than one unit)', 'sharing-club' ),
 			'skipped'        => __( 'Already imported (skipped)', 'sharing-club' ),
 			'missing_images' => __( 'Pictures not found', 'sharing-club' ),
@@ -787,7 +868,7 @@ class TAAS_VRI_Importer {
 		$dry_run = ! empty( $assoc_args['dry-run'] );
 		$report  = self::import( $dry_run );
 
-		foreach ( array( 'created', 'repaired', 'renamed', 'skipped', 'missing_images' ) as $key ) {
+		foreach ( array( 'created', 'repaired', 'updated', 'renamed', 'skipped', 'missing_images' ) as $key ) {
 			foreach ( $report[ $key ] as $line ) {
 				WP_CLI::log( sprintf( '[%s] %s', $key, $line ) );
 			}

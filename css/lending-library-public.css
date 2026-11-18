@@ -209,3 +209,309 @@ article .entry-header.entry-header{
 .taas-loan-requested .taas-loan-status {
     background: #9a6700;
 }
+
+/* ==========================================================================
+   Loan program pages: category cards, category list, item page
+   ========================================================================== */
+.taas-loan {
+    container-type: inline-size;
+    --taas-loan-accent: #c41e3a;
+    --taas-loan-border: #e2e2e2;
+    --taas-loan-muted: #777;
+    --taas-loan-in: #2e7d32;
+    --taas-loan-out: #b3261e;
+    --taas-loan-requested: #9a6700;
+}
+.taas-loan-page {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 40px 20px 60px;
+}
+.taas-loan img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Buttons and badges */
+.taas-loan .taas-loan-button {
+    display: inline-block;
+    padding: 0.6em 1.2em;
+    border: 2px solid #111;
+    border-radius: 3px;
+    background: #111;
+    color: #fff;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+}
+.taas-loan .taas-loan-button:hover,
+.taas-loan .taas-loan-button:focus {
+    background: #333;
+    border-color: #333;
+    color: #fff;
+}
+.taas-loan .taas-loan-button-outline {
+    background: transparent;
+    color: var(--taas-loan-accent);
+    border-color: var(--taas-loan-accent);
+}
+.taas-loan .taas-loan-button-outline:hover,
+.taas-loan .taas-loan-button-outline:focus {
+    background: var(--taas-loan-accent);
+    border-color: var(--taas-loan-accent);
+    color: #fff;
+}
+.taas-loan-badge {
+    display: inline-block;
+    padding: 0.15em 0.7em;
+    border-radius: 1em;
+    font-size: 0.8em;
+    font-weight: 700;
+    color: #fff;
+    background: var(--taas-loan-in);
+    vertical-align: middle;
+}
+.taas-loan-badge-out {
+    background: var(--taas-loan-out);
+}
+.taas-loan-badge-requested {
+    background: var(--taas-loan-requested);
+}
+.taas-loan-back {
+    margin: 0 0 1.25em;
+}
+.taas-loan-back a {
+    text-decoration: none;
+}
+
+/* Category cards */
+.taas-loan-cats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 30px;
+    margin: 1.5em 0;
+    padding: 0;
+    list-style: none;
+}
+.taas-loan-cat {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 2px 12px rgb(0 0 0 / 10%);
+    overflow: hidden;
+    transition: box-shadow 0.2s, transform 0.2s;
+}
+.taas-loan-cat:hover {
+    box-shadow: 0 6px 20px rgb(0 0 0 / 16%);
+    transform: translateY(-2px);
+}
+.taas-loan-cat a {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+}
+.taas-loan-cat-image {
+    position: relative;
+    display: block;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    background: #f3f3f3;
+}
+/* !important beats sizes some themes set inline on images. */
+.taas-loan .taas-loan-cat-image img {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    object-fit: cover;
+}
+.taas-loan-cat-name {
+    display: block;
+    padding: 0.9em 1.1em;
+    border-top: 1px solid var(--taas-loan-border);
+    color: var(--taas-loan-accent);
+    font-size: 1.25em;
+}
+
+/* Category list */
+.taas-loan-heading {
+    margin: 0 0 0.3em;
+}
+.taas-loan-intro {
+    margin-bottom: 1em;
+    color: var(--taas-loan-muted);
+}
+.taas-loan-list {
+    margin: 0 0 2em;
+    padding: 0;
+    list-style: none;
+}
+.taas-loan-row {
+    display: grid;
+    grid-template-columns: 220px 1fr 180px;
+    margin: 0 0 12px;
+    padding: 0;
+    border: 1px solid var(--taas-loan-border);
+    background: #fff;
+}
+.taas-loan-row-image {
+    display: block;
+    padding: 6px;
+}
+.taas-loan-row-body {
+    padding: 18px 24px;
+}
+.taas-loan .taas-loan-row-title {
+    margin: 0 0 0.2em;
+    padding: 0;
+    font-size: 1.25em;
+    font-weight: 700;
+}
+.taas-loan-row-title a {
+    color: inherit;
+    text-decoration: none;
+}
+.taas-loan-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6em;
+    align-items: center;
+    margin: 0 0 0.8em;
+    padding: 0;
+    color: var(--taas-loan-muted);
+    font-size: 0.9em;
+}
+.taas-loan-row-desc {
+    font-size: 0.95em;
+}
+.taas-loan-row-desc p {
+    margin: 0 0 0.5em;
+    padding: 0;
+}
+.taas-loan-row-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    border-left: 1px solid var(--taas-loan-border);
+}
+
+/* Item page */
+.taas-loan-detail {
+    display: grid;
+    grid-template-columns: minmax(0, 45%) 1fr;
+    gap: 40px;
+    padding: 16px;
+    border: 1px solid var(--taas-loan-border);
+    background: #fff;
+}
+.taas-loan .taas-loan-detail-image img,
+.taas-loan .taas-loan-row-image img {
+    display: block;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+}
+.taas-loan-detail-body {
+    padding: 8px 8px 8px 0;
+}
+.taas-loan .taas-loan-detail-cat {
+    margin: 0 0 0.2em;
+    padding: 0;
+    color: var(--taas-loan-muted);
+    font-size: 0.85em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.taas-loan .taas-loan-detail-title {
+    margin: 0 0 0.4em;
+    padding: 0;
+    font-size: 1.8em;
+    line-height: 1.25;
+}
+.taas-loan-detail-status {
+    margin: 0 0 1em;
+    padding: 0;
+}
+.taas-loan-detail-desc {
+    margin-bottom: 1.5em;
+}
+.taas-loan-detail-desc p {
+    margin: 0 0 0.9em;
+    padding: 0;
+}
+.taas-loan-stars {
+    margin: 0 0 0.8em;
+    color: #ccc;
+    font-size: 1.2em;
+}
+.taas-loan-stars .is-on {
+    color: #f5a623;
+}
+.taas-loan-note {
+    padding: 0.9em 1.1em;
+    border-left: 4px solid var(--taas-loan-requested);
+    background: #faf6ec;
+}
+
+/* "Log in / Join" box */
+.taas-loan-callout {
+    padding: 1.2em 1.4em;
+    border: 1px solid var(--taas-loan-border);
+    border-left: 4px solid var(--taas-loan-accent);
+    border-radius: 3px;
+    background: #fafafa;
+}
+.taas-loan-callout p {
+    margin: 0 0 0.8em;
+    padding: 0;
+}
+.taas-loan-callout-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75em;
+}
+.taas-loan-callout .taas-loan-callout-actions {
+    margin: 0;
+}
+
+/* Reviews */
+.taas-loan-reviews {
+    margin-top: 2em;
+}
+.taas-loan-reviews blockquote {
+    margin: 0 0 1em;
+    padding: 0.8em 1.1em;
+    border-left: 4px solid var(--taas-loan-border);
+    background: #fafafa;
+}
+.taas-loan-reviews textarea {
+    width: 100%;
+}
+
+/* Narrow spaces: phones, or themes with a narrow content column */
+@container (width <= 760px) {
+    .taas-loan-row {
+        grid-template-columns: 120px 1fr;
+    }
+    .taas-loan-row-body {
+        padding: 12px 14px;
+    }
+    .taas-loan-row-action {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+        padding: 0 14px 14px;
+        border-left: 0;
+    }
+    .taas-loan-detail {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    .taas-loan-detail-body {
+        padding: 0;
+    }
+}
