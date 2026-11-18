@@ -101,6 +101,9 @@ if ( ! class_exists( 'SCWP_Theme_Options' ) ) {
 					unset( $options['hide_comments'] ); // Remove from options if not checked
 				}
 
+				// Loan Manager email and phone fields.
+				$options = TAAS_Loan_Notify::sanitize( $options );
+
 				// Links
 				foreach ( array( 'join_url', 'login_url' ) as $key ) {
 					if ( ! empty( $options[ $key ] ) ) {
@@ -176,6 +179,7 @@ if ( ! class_exists( 'SCWP_Theme_Options' ) ) {
 								<p class="description"><?php esc_html_e( 'Where members log in. Leave empty to use the page at /login/, or the WordPress login.', 'sharing-club' ); ?></p>
 							</td>
 						</tr>
+						<?php TAAS_Loan_Notify::render_settings_rows(); ?>
 <!--
 						<?php // Text input example ?>
 						<tr valign="top">

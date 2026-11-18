@@ -124,6 +124,9 @@ Found under **Settings > TAAS Loan Program**:
 | Hide rating and comment form | Turns off member reviews | Your choice |
 | Join page | Where the **Join TAAS** button goes | Leave empty: it finds the `/join-taas/` page |
 | Login page | Where the **Log in to request** button goes | Leave empty: it finds the `/login/` page |
+| Loan Manager email | Who gets the email when a member requests an item. Separate several with commas | The Loan Program Manager's address. Empty uses the site admin email |
+| Mobile / Home phone field | Which [Participants Database](https://xnau.com/work/wordpress-plugins/participants-database/) fields go in the request email | Leave on **Automatic** if it shows the right fields |
+| Send test email | Sends a sample request (with you as the member) to the Loan Manager email | Try it after saving |
 
 ### Starting over
 
@@ -133,7 +136,7 @@ On the command line: `wp taas-loan reset` (add `--keep-pictures` to keep the pic
 
 ## Handling loans
 
-1. A logged-in member clicks the request button on an item. An email goes to the site's admin email address (set in **Settings > General**), and the item shows as **requested**.
+1. A logged-in member clicks the request button on an item. The Loan Manager gets an email with the item, the member's name, email, mobile and home phone, and an **Open the Loan Portal** button, and the item shows as **requested**. Phone numbers come from the member's Participants Database record with the same email as their WordPress account. Replying to the email goes straight to the member.
 2. When the member picks it up, open **TAAS Loan Program > Lendings**, edit the request, and fill in the lending date and return date.
 3. When it comes back, tick it in the list and choose **Mark as returned**. Edit it to add a note if anything's wrong (e.g. "missing lens cap"). The item shows as **available** again.
 
@@ -147,7 +150,7 @@ Requested by the Loan Program Manager. More details are coming.
 - [ ] **30-day reminders:** email the LPM when a loan reaches 30 days, so they can decide whether to ask for it back. (Not an "overdue" notice: there are no late returns.)
 - [ ] **No fixed return date:** let the LPM leave the return date empty, so an item stays **Out** until it's actually returned.
 - [ ] **Show the loan rules on the site:** so members see them before they request an item.
-- [ ] **LPM email setting:** send request and reminder emails to the LPM, not the site's admin email.
+- [x] **LPM email setting:** send request emails to the LPM, not the site's admin email. (Reminder emails will use it too.)
 - [ ] **Waiting list:** let members request an item that's out, and show the LPM who's waiting, in order.
 - [x] **Join link:** point "register" links to the [TAAS membership page](https://taas.org/join-taas/) instead of WordPress sign-up.
 - [x] **Privacy:** don't show the borrower's username to the public.
