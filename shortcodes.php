@@ -38,6 +38,9 @@ class TAAS_Loan_Shortcodes {
 	/** Post meta with an item's short description for lists. */
 	const SHORT_DESC = '_taas_short_description';
 
+	/** Pictures narrower than this are shown whole instead of stretched to fill a card. */
+	const CARD_IMAGE_MIN_WIDTH = 400;
+
 	/**
 	 * Register shortcodes and hooks.
 	 */
@@ -438,17 +441,50 @@ class TAAS_Loan_Shortcodes {
 	private static function category_image( $term ) {
 		$image_id = (int) get_term_meta( $term->term_id, self::TERM_IMAGE, true );
 		if ( $image_id ) {
-			$html = wp_get_attachment_image( $image_id, 'medium_large', false, array( 'loading' => 'lazy' ) );
+			$html = self::card_image( $image_id );
 			if ( $html ) {
 				return $html;
 			}
 		}
+		// Use the sharpest item picture, so small photos are not blown up.
+		$best_id    = 0;
+		$best_width = 0;
 		foreach ( self::posts_in( $term ) as $post ) {
-			if ( has_post_thumbnail( $post ) ) {
-				return get_the_post_thumbnail( $post, 'medium_large', array( 'loading' => 'lazy' ) );
+			$thumb_id = (int) get_post_thumbnail_id( $post );
+			if ( ! $thumb_id ) {
+				continue;
+			}
+			$src = wp_get_attachment_image_src( $thumb_id, 'medium_large' );
+			if ( $src && (int) $src[1] > $best_width ) {
+				$best_id    = $thumb_id;
+				$best_width = (int) $src[1];
 			}
 		}
-		return '';
+		if ( ! $best_id ) {
+			return '';
+		}
+		return self::card_image( $best_id );
+	}
+
+	/**
+	 * Card picture HTML, flagged when too small to fill the card sharply.
+	 *
+	 * @param int $image_id Attachment ID.
+	 * @return string HTML, or '' if missing.
+	 */
+	private static function card_image( $image_id ) {
+		$src = wp_get_attachment_image_src( $image_id, 'medium_large' );
+		if ( ! $src ) {
+			return '';
+		}
+		$attr = array(
+			'loading' => 'lazy',
+			'class'   => 'attachment-medium_large size-medium_large',
+		);
+		if ( (int) $src[1] < self::CARD_IMAGE_MIN_WIDTH ) {
+			$attr['class'] .= ' taas-loan-img-small';
+		}
+		return wp_get_attachment_image( $image_id, 'medium_large', false, $attr );
 	}
 
 	/**
