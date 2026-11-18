@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: TAAS Loan Program
-Plugin URI: https://github.com/joeytroy/taas-loan
+Plugin URI: https://github.com/The-Albuquerque-Astronomical-Society/taas-loan
 Update URI: false
 Description: Share books, dvd, tools, toys or any object with your community. Your users can easily lend, borrow and rate items and you know who borrowed what. Based on the Sharing Club plugin (https://wordpress.org/plugins/sharing-club/) by Manu Z. (netdelight).
 Author: Joey Troy
