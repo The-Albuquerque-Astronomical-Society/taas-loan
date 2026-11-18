@@ -14,7 +14,7 @@
 .rating:not(:checked) > input {
     position:absolute;
     top:-9999px;
-    clip:rect(0,0,0,0);
+    clip-path:inset(50%);
 }
 
 .rating:not(:checked) > label {
