@@ -1,0 +1,18 @@
+{
+  "name": "taas-loan",
+  "private": true,
+  "description": "Dev tooling for the TAAS Loan Program WordPress plugin",
+  "license": "GPL-2.0-or-later",
+  "scripts": {
+    "lint": "npm run lint:js && npm run lint:css",
+    "lint:js": "eslint .",
+    "lint:css": "stylelint \"css/**/*.css\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "stylelint": "^18.0.0",
+    "stylelint-config-recommended": "^19.0.0"
+  }
+}

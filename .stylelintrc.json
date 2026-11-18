@@ -1,0 +1,7 @@
+{
+  "extends": "stylelint-config-recommended",
+  "ignoreFiles": ["css/jquery-ui.css", "node_modules/**", "vendor/**"],
+  "rules": {
+    "no-descending-specificity": null
+  }
+}
