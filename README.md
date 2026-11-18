@@ -95,7 +95,7 @@ For each item it copies the **name, description, categories, main picture and ex
 - Vik Rent Items itself isn't changed, so you can keep it running until you're ready to switch.
 - It's safe to run again: items that were already imported are skipped.
 - Items hidden in Vik Rent Items come in as **drafts**.
-- An item with more than one unit (e.g. 2 identical eyepieces) comes in once. The page lists these so you can add the copies by hand.
+- An item with more than one unit (e.g. 2 identical Solar Binoculars) comes in as separate entries, "Solar Binoculars #1" and "#2", so each one can be lent out on its own. They share the same pictures.
 
 On the command line (WP-CLI), the same import is:
 
@@ -112,6 +112,12 @@ Found under **Settings > TAAS Loan Program**:
 | --- | --- | --- |
 | Make public (visible without login) | Lets anyone see the equipment list, not just logged-in members | **On.** Anyone can browse; checking out still needs a member login. |
 | Hide rating and comment form | Turns off member reviews | Your choice |
+
+### Starting over
+
+At the bottom of **Settings > TAAS Loan Program**, **Delete all data** permanently removes every item, loan record and category, plus (if ticked) the pictures attached to items. Type `DELETE` to confirm. Your settings, other pages and posts, and Vik Rent Items are not touched. Back up the site first: this can't be undone.
+
+On the command line: `wp taas-loan reset` (add `--keep-pictures` to keep the pictures).
 
 ## Handling loans
 

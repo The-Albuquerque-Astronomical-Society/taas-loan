@@ -24,6 +24,9 @@ class TAAS_VRI_Importer {
 	/** Post meta that remembers which Vik Rent Items item a post came from. */
 	const META_KEY = '_taas_vri_item_id';
 
+	/** Post meta with the unit number, for items that have more than one unit. */
+	const UNIT_KEY = '_taas_vri_unit';
+
 	/** Admin page slug. */
 	const PAGE = 'taas-vri-import';
 
@@ -164,18 +167,22 @@ class TAAS_VRI_Importer {
 	}
 
 	/**
-	 * Post already imported from this Vik Rent Items item, if any.
+	 * Posts already imported from this Vik Rent Items item, by unit number.
+	 *
+	 * Posts imported before unit numbers were stored count as unit 1.
 	 *
 	 * @param int $vri_id Vik Rent Items item ID.
-	 * @return int Post ID or 0.
+	 * @return array<int,int> Unit number => post ID.
 	 */
-	private static function find_existing( $vri_id ) {
+	private static function find_units( $vri_id ) {
 		$posts = get_posts(
 			array(
 				'post_type'      => self::POST_TYPE,
 				'post_status'    => 'any',
-				'posts_per_page' => 1,
+				'posts_per_page' => -1,
 				'fields'         => 'ids',
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
 				'no_found_rows'  => true,
 				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 				'meta_query'     => array(
@@ -186,7 +193,28 @@ class TAAS_VRI_Importer {
 				),
 			)
 		);
-		return $posts ? (int) $posts[0] : 0;
+		$units = array();
+		foreach ( $posts as $post_id ) {
+			$unit = (int) get_post_meta( $post_id, self::UNIT_KEY, true );
+			$unit = $unit > 0 ? $unit : 1;
+			if ( ! isset( $units[ $unit ] ) ) {
+				$units[ $unit ] = (int) $post_id;
+			}
+		}
+		ksort( $units );
+		return $units;
+	}
+
+	/**
+	 * Title for one unit: "Name" for single items, "Name #2" when there are several.
+	 *
+	 * @param string $name  Item name.
+	 * @param int    $unit  Unit number.
+	 * @param int    $units Total units.
+	 * @return string
+	 */
+	private static function unit_title( $name, $unit, $units ) {
+		return $units > 1 ? $name . ' #' . $unit : $name;
 	}
 
 	/* ------------------------------------------------------------------
@@ -196,6 +224,10 @@ class TAAS_VRI_Importer {
 	/**
 	 * Run the import.
 	 *
+	 * Items with more than one unit get one entry per unit ("Name #1", "Name #2"),
+	 * because each physical unit is lent out separately. The copies share the
+	 * same pictures.
+	 *
 	 * @param bool $dry_run Only report what would happen.
 	 * @return array Report.
 	 */
@@ -203,9 +235,9 @@ class TAAS_VRI_Importer {
 		$report = array(
 			'dry_run'        => (bool) $dry_run,
 			'created'        => array(),
+			'renamed'        => array(),
 			'skipped'        => array(),
 			'missing_images' => array(),
-			'multi_unit'     => array(),
 			'errors'         => array(),
 			'images'         => 0,
 		);
@@ -235,109 +267,189 @@ class TAAS_VRI_Importer {
 		}
 
 		foreach ( self::get_items() as $item ) {
-			$vri_id = (int) $item['id'];
-			$name   = wp_strip_all_tags( (string) $item['name'] );
+			$vri_id   = (int) $item['id'];
+			$name     = wp_strip_all_tags( (string) $item['name'] );
+			$units    = max( 1, (int) $item['units'] );
+			$existing = self::find_units( $vri_id );
+			$missing  = array_values( array_diff( range( 1, $units ), array_keys( $existing ) ) );
 
-			if ( self::find_existing( $vri_id ) ) {
-				$report['skipped'][] = $name;
+			// An item imported as a single entry that now has several units: call it "#1".
+			if ( $units > 1 && isset( $existing[1] ) && get_post_field( 'post_title', $existing[1], 'raw' ) === $name ) {
+				$new_title = self::unit_title( $name, 1, $units );
+				if ( ! $dry_run ) {
+					wp_update_post(
+						array(
+							'ID'         => $existing[1],
+							'post_title' => $new_title,
+						)
+					);
+				}
+				$report['renamed'][] = $name . ' → ' . $new_title;
+			}
+
+			if ( ! $missing ) {
+				$report['skipped'][] = self::unit_title( $name, 1, $units ) . ( $units > 1 ? ' … #' . $units : '' );
 				continue;
 			}
 
-			if ( (int) $item['units'] > 1 ) {
-				/* translators: 1: item name, 2: number of units. */
-				$report['multi_unit'][] = sprintf( __( '%1$s (%2$d units)', 'sharing-club' ), $name, (int) $item['units'] );
-			}
-
-			$main_image  = self::image_path( $item['img'] );
+			// Pictures are only needed when no copy of this item exists yet.
+			$main_image  = '';
 			$more_images = array();
-			foreach ( self::parse_more_images( $item['moreimgs'] ) as $file ) {
-				$path = self::image_path( $file, array( 'big_' ) );
-				if ( $path ) {
-					$more_images[] = $path;
-				} else {
-					$report['missing_images'][] = $name . ': ' . basename( $file );
+			if ( ! $existing ) {
+				$main_image = self::image_path( $item['img'] );
+				foreach ( self::parse_more_images( $item['moreimgs'] ) as $file ) {
+					$path = self::image_path( $file, array( 'big_' ) );
+					if ( $path ) {
+						$more_images[] = $path;
+					} else {
+						$report['missing_images'][] = $name . ': ' . basename( $file );
+					}
 				}
-			}
-			if ( ! empty( $item['img'] ) && ! $main_image ) {
-				$report['missing_images'][] = $name . ': ' . basename( $item['img'] );
+				if ( ! empty( $item['img'] ) && ! $main_image ) {
+					$report['missing_images'][] = $name . ': ' . basename( $item['img'] );
+				}
 			}
 
 			if ( $dry_run ) {
-				$report['created'][] = $name;
-				$report['images']   += ( $main_image ? 1 : 0 ) + count( $more_images );
+				foreach ( $missing as $unit ) {
+					$report['created'][] = self::unit_title( $name, $unit, $units );
+				}
+				$report['images'] += ( $main_image ? 1 : 0 ) + count( $more_images );
 				continue;
 			}
 
-			$content = trim( (string) $item['info'] );
-			if ( '' === $content ) {
-				$content = trim( (string) $item['shortdesc'] );
+			// Copy from an existing unit if there is one.
+			$template = null;
+			if ( $existing ) {
+				$source   = reset( $existing );
+				$template = array(
+					'content' => get_post_field( 'post_content', $source, 'raw' ),
+					'thumb'   => (int) get_post_thumbnail_id( $source ),
+					'terms'   => wp_get_object_terms( $source, self::TAXONOMY, array( 'fields' => 'ids' ) ),
+				);
+				if ( is_wp_error( $template['terms'] ) ) {
+					$template['terms'] = array();
+				}
 			}
 
-			$post_id = wp_insert_post(
-				array(
-					'post_type'    => self::POST_TYPE,
-					'post_title'   => $name,
-					'post_content' => wp_kses_post( $content ),
-					'post_status'  => (int) $item['avail'] ? 'publish' : 'draft',
-				),
-				true
-			);
-			if ( is_wp_error( $post_id ) ) {
-				$report['errors'][] = $name . ': ' . $post_id->get_error_message();
-				continue;
-			}
-			update_post_meta( $post_id, self::META_KEY, $vri_id );
+			foreach ( $missing as $unit ) {
+				$title = self::unit_title( $name, $unit, $units );
 
-			// Categories.
-			$term_ids = array();
-			foreach ( self::parse_category_ids( $item['idcat'] ) as $cat_id ) {
-				if ( ! isset( $categories[ $cat_id ] ) ) {
+				if ( $template ) {
+					$post_id = self::create_post( $title, $template['content'], $item, $unit );
+					if ( is_wp_error( $post_id ) ) {
+						$report['errors'][] = $title . ': ' . $post_id->get_error_message();
+						continue;
+					}
+					if ( $template['terms'] ) {
+						wp_set_object_terms( $post_id, array_map( 'intval', $template['terms'] ), self::TAXONOMY );
+					}
+					if ( $template['thumb'] ) {
+						set_post_thumbnail( $post_id, $template['thumb'] );
+					}
+					$report['created'][] = $title;
 					continue;
 				}
-				$term_id = self::get_term_id( $categories[ $cat_id ], $term_cache );
-				if ( $term_id ) {
-					$term_ids[] = $term_id;
-				}
-			}
-			if ( $term_ids ) {
-				wp_set_object_terms( $post_id, $term_ids, self::TAXONOMY );
-			}
 
-			// Main picture.
-			if ( $main_image ) {
-				$attachment_id = self::attach_image( $main_image, $post_id, $name );
-				if ( is_wp_error( $attachment_id ) ) {
-					$report['errors'][] = $name . ': ' . $attachment_id->get_error_message();
-				} else {
-					set_post_thumbnail( $post_id, $attachment_id );
-					++$report['images'];
+				// First copy: full import with pictures.
+				$content = trim( (string) $item['info'] );
+				if ( '' === $content ) {
+					$content = trim( (string) $item['shortdesc'] );
 				}
-			}
+				$content = wp_kses_post( $content );
 
-			// Extra pictures, shown as a gallery under the description.
-			$gallery = array();
-			foreach ( $more_images as $path ) {
-				$attachment_id = self::attach_image( $path, $post_id, $name );
-				if ( is_wp_error( $attachment_id ) ) {
-					$report['errors'][] = $name . ': ' . $attachment_id->get_error_message();
-				} else {
-					$gallery[] = $attachment_id;
-					++$report['images'];
+				$post_id = self::create_post( $title, $content, $item, $unit );
+				if ( is_wp_error( $post_id ) ) {
+					$report['errors'][] = $title . ': ' . $post_id->get_error_message();
+					continue;
 				}
-			}
-			if ( $gallery ) {
-				wp_update_post(
-					array(
-						'ID'           => $post_id,
-						'post_content' => wp_kses_post( $content ) . "\n\n" . '[gallery ids="' . implode( ',', $gallery ) . '"]',
-					)
+
+				// Categories.
+				$term_ids = array();
+				foreach ( self::parse_category_ids( $item['idcat'] ) as $cat_id ) {
+					if ( ! isset( $categories[ $cat_id ] ) ) {
+						continue;
+					}
+					$term_id = self::get_term_id( $categories[ $cat_id ], $term_cache );
+					if ( $term_id ) {
+						$term_ids[] = $term_id;
+					}
+				}
+				if ( $term_ids ) {
+					wp_set_object_terms( $post_id, $term_ids, self::TAXONOMY );
+				}
+
+				// Main picture.
+				$thumb_id = 0;
+				if ( $main_image ) {
+					$attachment_id = self::attach_image( $main_image, $post_id, $name );
+					if ( is_wp_error( $attachment_id ) ) {
+						$report['errors'][] = $name . ': ' . $attachment_id->get_error_message();
+					} else {
+						set_post_thumbnail( $post_id, $attachment_id );
+						$thumb_id = (int) $attachment_id;
+						++$report['images'];
+					}
+				}
+
+				// Extra pictures, shown as a gallery under the description.
+				$gallery = array();
+				foreach ( $more_images as $path ) {
+					$attachment_id = self::attach_image( $path, $post_id, $name );
+					if ( is_wp_error( $attachment_id ) ) {
+						$report['errors'][] = $name . ': ' . $attachment_id->get_error_message();
+					} else {
+						$gallery[] = (int) $attachment_id;
+						++$report['images'];
+					}
+				}
+				if ( $gallery ) {
+					$content .= "\n\n" . '[gallery ids="' . implode( ',', $gallery ) . '"]';
+					wp_update_post(
+						array(
+							'ID'           => $post_id,
+							'post_content' => $content,
+						)
+					);
+				}
+
+				$template = array(
+					'content' => $content,
+					'thumb'   => $thumb_id,
+					'terms'   => $term_ids,
 				);
-			}
 
-			$report['created'][] = $name;
+				$report['created'][] = $title;
+			}
 		}
 
 		return $report;
+	}
+
+	/**
+	 * Create one item post and remember where it came from.
+	 *
+	 * @param string $title   Post title.
+	 * @param string $content Post content (already cleaned).
+	 * @param array  $item    Vik Rent Items row.
+	 * @param int    $unit    Unit number.
+	 * @return int|WP_Error Post ID.
+	 */
+	private static function create_post( $title, $content, array $item, $unit ) {
+		$post_id = wp_insert_post(
+			array(
+				'post_type'    => self::POST_TYPE,
+				'post_title'   => $title,
+				'post_content' => $content,
+				'post_status'  => (int) $item['avail'] ? 'publish' : 'draft',
+			),
+			true
+		);
+		if ( ! is_wp_error( $post_id ) ) {
+			update_post_meta( $post_id, self::META_KEY, (int) $item['id'] );
+			update_post_meta( $post_id, self::UNIT_KEY, (int) $unit );
+		}
+		return $post_id;
 	}
 
 	/**
@@ -505,8 +617,8 @@ class TAAS_VRI_Importer {
 	private static function render_report( array $report ) {
 		$sections = array(
 			'created'        => $report['dry_run'] ? __( 'Will be imported', 'sharing-club' ) : __( 'Imported', 'sharing-club' ),
+			'renamed'        => $report['dry_run'] ? __( 'Will be renamed (now has more than one unit)', 'sharing-club' ) : __( 'Renamed (now has more than one unit)', 'sharing-club' ),
 			'skipped'        => __( 'Already imported (skipped)', 'sharing-club' ),
-			'multi_unit'     => __( 'Items with more than one unit (imported once; add copies by hand if needed)', 'sharing-club' ),
 			'missing_images' => __( 'Pictures not found', 'sharing-club' ),
 			'errors'         => __( 'Errors', 'sharing-club' ),
 		);
@@ -546,7 +658,7 @@ class TAAS_VRI_Importer {
 		$dry_run = ! empty( $assoc_args['dry-run'] );
 		$report  = self::import( $dry_run );
 
-		foreach ( array( 'created', 'skipped', 'multi_unit', 'missing_images' ) as $key ) {
+		foreach ( array( 'created', 'renamed', 'skipped', 'missing_images' ) as $key ) {
 			foreach ( $report[ $key ] as $line ) {
 				WP_CLI::log( sprintf( '[%s] %s', $key, $line ) );
 			}
