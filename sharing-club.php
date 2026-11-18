@@ -259,18 +259,9 @@ function scwp_process_data(){
             if( $post->post_type == 'shared_item' && is_user_logged_in() ){
                 $scwp_loan = TAAS_Loan_Shortcodes::loan( get_the_ID() );
                 if(isset($_REQUEST['iwantit']) && isset( $_POST['booking_nonce'] ) && wp_verify_nonce( $_POST['booking_nonce'], 'booking' ) && 'in' === $scwp_loan['status']){
-                    // email notification
-                    $to = get_option('admin_email');
-                    $headers = array('Content-Type: text/html; charset=UTF-8');
-                    $current_user = wp_get_current_user();
-                    $subject = sprintf(__('%s requested an object', 'sharing-club'), $current_user->user_login);
-                    $message = __("There's a new request for lending. You can manage the requests connecting to :", 'sharing-club');
-                    $message .= ' <a href="'.get_admin_url().'" target="_blank">'.get_admin_url().'</a>';
-                    add_filter( 'wp_mail_content_type', function( $content_type ) {
-                        return 'text/html';
-                    });
-                    wp_mail( $to, $subject,  $message, $headers) ;
                     $wpdb->insert( $wpdb->comments, array('user_id'=>get_current_user_id(), 'comment_post_ID'=>get_the_ID(), 'comment_type'=>'lending'));
+                    // Tell the Loan Manager, with the member's contact details.
+                    TAAS_Loan_Notify::send_request( get_the_ID(), get_current_user_id() );
                     header('Location: '.$_SERVER['REQUEST_URI']);
                 }
                 if((isset($_POST['comment_karma']) || isset($_POST['comment_content']) ) && wp_verify_nonce( $_POST['review_nonce'], 'review' )){
@@ -304,6 +295,9 @@ require_once plugin_dir_path( __FILE__ ) . 'vri-import.php';
 
 // SHORTCODES
 require_once plugin_dir_path( __FILE__ ) . 'shortcodes.php';
+
+// LOAN REQUEST EMAILS
+require_once plugin_dir_path( __FILE__ ) . 'loan-notify.php';
 
 // DELETE ALL DATA
 require_once plugin_dir_path( __FILE__ ) . 'reset-data.php';
