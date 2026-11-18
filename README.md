@@ -88,12 +88,13 @@ If the site already lists the equipment in **Vik Rent Items**, you can copy it a
 
 1. Install and activate this plugin on the **same WordPress site** that runs Vik Rent Items.
 2. Go to **TAAS Loan Program > Import**.
-3. Check the preview, then click **Import**.
+3. Check the preview, then click **Import**. It works in small batches with a progress message, so keep the page open until it finishes.
 
 For each item it copies the **name, description, categories, main picture and extra pictures**. The pictures go into the Media Library.
 
 - Vik Rent Items itself isn't changed, so you can keep it running until you're ready to switch.
-- It's safe to run again: items that were already imported are skipped.
+- It's safe to run again: items that were already imported are skipped, and any that are missing their picture get it.
+- If it stops part way (for example the connection drops), click **Import** again to carry on.
 - Items hidden in Vik Rent Items come in as **drafts**.
 - An item with more than one unit (e.g. 2 identical Solar Binoculars) comes in as separate entries, "Solar Binoculars #1" and "#2", so each one can be lent out on its own. They share the same pictures.
 

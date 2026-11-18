@@ -30,8 +30,14 @@ class TAAS_VRI_Importer {
 	/** Admin page slug. */
 	const PAGE = 'taas-vri-import';
 
-	/** admin-post.php action name. */
+	/** Nonce and AJAX action name. */
 	const ACTION = 'taas_vri_import';
+
+	/** Seconds of work per batch, well under typical host time limits. */
+	const BATCH_SECONDS = 20;
+
+	/** Admin page hook, set when the menu is added. */
+	private static $page_hook = '';
 
 	/** Post type and taxonomy used by this plugin. */
 	const POST_TYPE = 'shared_item';
@@ -42,7 +48,8 @@ class TAAS_VRI_Importer {
 	 */
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ) );
-		add_action( 'admin_post_' . self::ACTION, array( __CLASS__, 'handle_import' ) );
+		add_action( 'wp_ajax_' . self::ACTION, array( __CLASS__, 'ajax_batch' ) );
+		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue' ) );
 
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			WP_CLI::add_command( 'taas-loan import-vri', array( __CLASS__, 'cli' ) );
@@ -228,13 +235,21 @@ class TAAS_VRI_Importer {
 	 * because each physical unit is lent out separately. The copies share the
 	 * same pictures.
 	 *
+	 * Big imports can be split into batches: pass the item to start from and a
+	 * time budget, and the report's 'next' says where to continue (null when done).
+	 *
 	 * @param bool $dry_run Only report what would happen.
+	 * @param int  $offset  Item to start from (0 = first).
+	 * @param int  $seconds Stop starting new items after this many seconds (0 = no limit).
 	 * @return array Report.
 	 */
-	public static function import( $dry_run = false ) {
+	public static function import( $dry_run = false, $offset = 0, $seconds = 0 ) {
 		$report = array(
 			'dry_run'        => (bool) $dry_run,
+			'next'           => null,
+			'total'          => 0,
 			'created'        => array(),
+			'repaired'       => array(),
 			'renamed'        => array(),
 			'skipped'        => array(),
 			'missing_images' => array(),
@@ -260,13 +275,23 @@ class TAAS_VRI_Importer {
 		$term_cache = array();
 
 		// Create the categories up front, in Vik Rent Items order, so lists show them in that order.
-		if ( ! $dry_run ) {
+		if ( ! $dry_run && 0 === (int) $offset ) {
 			foreach ( $categories as $category_name ) {
 				self::get_term_id( $category_name, $term_cache );
 			}
 		}
 
-		foreach ( self::get_items() as $item ) {
+		$items           = self::get_items();
+		$count           = count( $items );
+		$report['total'] = $count;
+		$started         = microtime( true );
+
+		for ( $i = max( 0, (int) $offset ); $i < $count; $i++ ) {
+			if ( $seconds && $i > $offset && ( microtime( true ) - $started ) > $seconds ) {
+				$report['next'] = $i;
+				break;
+			}
+			$item     = $items[ $i ];
 			$vri_id   = (int) $item['id'];
 			$name     = wp_strip_all_tags( (string) $item['name'] );
 			$units    = max( 1, (int) $item['units'] );
@@ -285,6 +310,15 @@ class TAAS_VRI_Importer {
 					);
 				}
 				$report['renamed'][] = $name . ' → ' . $new_title;
+			}
+
+			// Fill in a missing picture, e.g. after an import was cut off half way.
+			if ( $existing ) {
+				$fixed = self::repair_pictures( $item, $existing, $name, $dry_run );
+				if ( $fixed ) {
+					$report['repaired'][] = $name;
+					$report['images']    += $fixed;
+				}
 			}
 
 			if ( ! $missing ) {
@@ -427,6 +461,48 @@ class TAAS_VRI_Importer {
 	}
 
 	/**
+	 * Give existing copies of an item their main picture if they don't have one.
+	 *
+	 * @param array  $item     Vik Rent Items row.
+	 * @param array  $existing Unit number => post ID.
+	 * @param string $name     Item name.
+	 * @param bool   $dry_run  Only count what would be done.
+	 * @return int Pictures uploaded or linked.
+	 */
+	private static function repair_pictures( array $item, array $existing, $name, $dry_run ) {
+		$source = reset( $existing );
+		$thumb  = (int) get_post_thumbnail_id( $source );
+		$fixed  = 0;
+
+		if ( ! $thumb ) {
+			$path = self::image_path( $item['img'] );
+			if ( ! $path ) {
+				return 0;
+			}
+			if ( $dry_run ) {
+				return count( $existing );
+			}
+			$attachment_id = self::attach_image( $path, $source, $name );
+			if ( is_wp_error( $attachment_id ) ) {
+				return 0;
+			}
+			set_post_thumbnail( $source, $attachment_id );
+			$thumb = (int) $attachment_id;
+			++$fixed;
+		}
+
+		foreach ( $existing as $post_id ) {
+			if ( (int) $post_id !== (int) $source && ! get_post_thumbnail_id( $post_id ) ) {
+				if ( ! $dry_run ) {
+					set_post_thumbnail( $post_id, $thumb );
+				}
+				++$fixed;
+			}
+		}
+		return $fixed;
+	}
+
+	/**
 	 * Create one item post and remember where it came from.
 	 *
 	 * @param string $title   Post title.
@@ -513,7 +589,7 @@ class TAAS_VRI_Importer {
 	 * Add TAAS Loan Program > Import.
 	 */
 	public static function add_menu() {
-		add_submenu_page(
+		self::$page_hook = add_submenu_page(
 			'edit.php?post_type=' . self::POST_TYPE,
 			__( 'Import from Vik Rent Items', 'sharing-club' ),
 			__( 'Import', 'sharing-club' ),
@@ -524,28 +600,78 @@ class TAAS_VRI_Importer {
 	}
 
 	/**
-	 * Handle the Import button.
+	 * Load the import script on the Import page only.
+	 *
+	 * @param string $hook Current admin page hook.
 	 */
-	public static function handle_import() {
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'sharing-club' ), 403 );
+	public static function enqueue( $hook ) {
+		if ( ! self::$page_hook || $hook !== self::$page_hook ) {
+			return;
 		}
-		check_admin_referer( self::ACTION );
-
-		$report = self::import( false );
-		set_transient( 'taas_vri_report_' . get_current_user_id(), $report, HOUR_IN_SECONDS );
-
-		wp_safe_redirect(
-			add_query_arg(
-				array(
-					'post_type' => self::POST_TYPE,
-					'page'      => self::PAGE,
-					'done'      => 1,
+		wp_enqueue_script( 'taas-vri-import', plugin_dir_url( __FILE__ ) . 'js/vri-import.js', array(), '1.3.1', true );
+		wp_localize_script(
+			'taas-vri-import',
+			'taasVriImport',
+			array(
+				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'action'  => self::ACTION,
+				'nonce'   => wp_create_nonce( self::ACTION ),
+				'doneUrl' => add_query_arg(
+					array(
+						'post_type' => self::POST_TYPE,
+						'page'      => self::PAGE,
+						'done'      => 1,
+					),
+					admin_url( 'edit.php' )
 				),
-				admin_url( 'edit.php' )
+				'i18n'    => array(
+					/* translators: 1: items checked so far, 2: total items. */
+					'progress' => __( 'Importing… %1$d of %2$d items checked. Keep this page open.', 'sharing-club' ),
+					'retrying' => __( 'The server was slow, trying again…', 'sharing-club' ),
+					/* translators: %s: error message. */
+					'stopped'  => __( 'The import stopped: %s. Click Import again to continue. Finished items are skipped.', 'sharing-club' ),
+				),
 			)
 		);
-		exit;
+	}
+
+	/**
+	 * Import one batch (called repeatedly by the Import page).
+	 */
+	public static function ajax_batch() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'sharing-club' ) ), 403 );
+		}
+		check_ajax_referer( self::ACTION, 'nonce' );
+
+		$offset  = isset( $_POST['offset'] ) ? absint( wp_unslash( $_POST['offset'] ) ) : 0;
+		$seconds = (int) apply_filters( 'taas_vri_batch_seconds', self::BATCH_SECONDS );
+		$batch   = self::import( false, $offset, max( 1, $seconds ) );
+
+		// Add this batch to the running report shown at the end.
+		$key    = 'taas_vri_report_' . get_current_user_id();
+		$report = $offset ? get_transient( $key ) : false;
+		if ( ! is_array( $report ) ) {
+			$report = $batch;
+		} else {
+			foreach ( array( 'created', 'repaired', 'renamed', 'skipped', 'missing_images', 'errors' ) as $list ) {
+				$report[ $list ] = array_merge( $report[ $list ], $batch[ $list ] );
+			}
+			$report['images'] += $batch['images'];
+		}
+		$report['next'] = $batch['next'];
+		set_transient( $key, $report, HOUR_IN_SECONDS );
+
+		if ( $batch['errors'] && 0 === $batch['total'] ) {
+			wp_send_json_error( array( 'message' => implode( ' ', $batch['errors'] ) ) );
+		}
+
+		wp_send_json_success(
+			array(
+				'next'  => $batch['next'],
+				'total' => $batch['total'],
+			)
+		);
 	}
 
 	/**
@@ -590,18 +716,20 @@ class TAAS_VRI_Importer {
 		echo '<h2>' . esc_html__( 'Preview', 'sharing-club' ) . '</h2>';
 		self::render_report( $preview );
 
-		if ( $preview['created'] ) {
-			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
-			echo '<input type="hidden" name="action" value="' . esc_attr( self::ACTION ) . '" />';
-			wp_nonce_field( self::ACTION );
-			submit_button(
-				sprintf(
+		if ( $preview['created'] || $preview['repaired'] ) {
+			echo '<p class="submit"><button type="button" id="taas-vri-start" class="button button-primary">';
+			if ( $preview['created'] ) {
+				printf(
 					/* translators: %d: number of items. */
-					__( 'Import %d items', 'sharing-club' ),
+					esc_html__( 'Import %d items', 'sharing-club' ),
 					count( $preview['created'] )
-				)
-			);
-			echo '</form>';
+				);
+			} else {
+				esc_html_e( 'Add missing pictures', 'sharing-club' );
+			}
+			echo '</button></p>';
+			echo '<div id="taas-vri-progress" class="notice notice-info inline" hidden><p></p></div>';
+			echo '<p class="description">' . esc_html__( 'The import runs in small batches so the server does not time out. Keep this page open until it finishes.', 'sharing-club' ) . '</p>';
 		} else {
 			echo '<p><strong>' . esc_html__( 'Nothing new to import.', 'sharing-club' ) . '</strong></p>';
 		}
@@ -617,6 +745,7 @@ class TAAS_VRI_Importer {
 	private static function render_report( array $report ) {
 		$sections = array(
 			'created'        => $report['dry_run'] ? __( 'Will be imported', 'sharing-club' ) : __( 'Imported', 'sharing-club' ),
+			'repaired'       => $report['dry_run'] ? __( 'Existing items that will get their missing picture', 'sharing-club' ) : __( 'Existing items that got their missing picture', 'sharing-club' ),
 			'renamed'        => $report['dry_run'] ? __( 'Will be renamed (now has more than one unit)', 'sharing-club' ) : __( 'Renamed (now has more than one unit)', 'sharing-club' ),
 			'skipped'        => __( 'Already imported (skipped)', 'sharing-club' ),
 			'missing_images' => __( 'Pictures not found', 'sharing-club' ),
@@ -658,7 +787,7 @@ class TAAS_VRI_Importer {
 		$dry_run = ! empty( $assoc_args['dry-run'] );
 		$report  = self::import( $dry_run );
 
-		foreach ( array( 'created', 'renamed', 'skipped', 'missing_images' ) as $key ) {
+		foreach ( array( 'created', 'repaired', 'renamed', 'skipped', 'missing_images' ) as $key ) {
 			foreach ( $report[ $key ] as $line ) {
 				WP_CLI::log( sprintf( '[%s] %s', $key, $line ) );
 			}
