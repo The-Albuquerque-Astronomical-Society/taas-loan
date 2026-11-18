@@ -57,8 +57,16 @@ function scwp_plugin_activate() {
     if ( current_user_can( 'manage_options' ) ) {
         add_option('sharing-club_version', '1.2.2');
     }
+    // Rebuild page addresses once, on the next page load, after the item type is registered.
+    update_option( 'scwp_flush_rewrite_rules', 1 );
 }
 register_activation_hook( __FILE__, 'scwp_plugin_activate' );
+
+function scwp_plugin_deactivate() {
+    unregister_post_type( 'shared_item' );
+    flush_rewrite_rules();
+}
+register_deactivation_hook( __FILE__, 'scwp_plugin_deactivate' );
 
 function scwp_init() {
     //if ( current_user_can( 'manage_options' ) ) {
@@ -143,10 +151,11 @@ function scwp_init() {
 
         register_taxonomy_for_object_type( 'shared_item_category', 'shared_item' );
 
-        //Ensure the $wp_rewrite global is loaded
-        global $wp_rewrite;
-        //Call flush_rules() as a method of the $wp_rewrite object
-        $wp_rewrite->flush_rules( false );
+        // Rebuild page addresses only right after activation, not on every page load.
+        if ( get_option( 'scwp_flush_rewrite_rules' ) ) {
+            delete_option( 'scwp_flush_rewrite_rules' );
+            flush_rewrite_rules( false );
+        }
     //}
 }
 add_action('init', 'scwp_init');
