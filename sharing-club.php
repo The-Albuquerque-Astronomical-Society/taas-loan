@@ -301,3 +301,6 @@ require_once plugin_dir_path( __FILE__ ) . 'vri-import.php';
 // SHORTCODES
 require_once plugin_dir_path( __FILE__ ) . 'shortcodes.php';
 
+// DELETE ALL DATA
+require_once plugin_dir_path( __FILE__ ) . 'reset-data.php';
+

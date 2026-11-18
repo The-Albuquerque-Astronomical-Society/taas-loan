@@ -10,6 +10,8 @@ All notable changes to this project are listed here.
 - Added an importer that copies equipment (names, descriptions, categories and pictures) from Vik Rent Items. Find it at TAAS Loan Program > Import, or run `wp taas-loan import-vri`.
 - Added the `[taas_loan_items]` shortcode to show the equipment on any page, with In / Out / Requested labels.
 - The importer now creates categories in the same order as Vik Rent Items.
+- The importer now creates one entry per unit for items with more than one ("Name #1", "Name #2"), sharing the same pictures.
+- Added **Delete all data** at the bottom of Settings > TAAS Loan Program (and `wp taas-loan reset`) to start over.
 
 ## [1.3.1] - 2022-12-02
 
