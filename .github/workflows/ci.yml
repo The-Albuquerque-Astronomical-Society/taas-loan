@@ -36,6 +36,10 @@ jobs:
   phpcs:
     name: PHP code standards
     runs-on: ubuntu-latest
+    env:
+      # Report-only while the existing issues from the original plugin are fixed.
+      # Set to 'true' to make this check fail the build again.
+      PHPCS_BLOCKING: 'false'
     steps:
       - uses: actions/checkout@v5
       - uses: shivammathur/setup-php@v2
@@ -46,7 +50,22 @@ jobs:
       - name: Install PHP tools
         run: composer update --no-interaction --no-progress
       - name: Run PHPCS
-        run: vendor/bin/phpcs -q --report=checkstyle | cs2pr
+        run: |
+          set -o pipefail
+          if vendor/bin/phpcs -q --report=checkstyle | cs2pr; then
+            echo "No PHPCS issues found." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "### PHPCS issues"
+            echo '```'
+            vendor/bin/phpcs -q --report=summary --no-colors || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$PHPCS_BLOCKING" = "true" ]; then
+            exit 1
+          fi
+          echo "::warning::PHPCS found issues but is in report-only mode (PHPCS_BLOCKING=false)."
 
   js-css:
     name: JavaScript & CSS

@@ -1,5 +1,7 @@
 # TAAS Loan Program
 
+[![CI](https://github.com/joeytroy/taas-loan/actions/workflows/ci.yml/badge.svg)](https://github.com/joeytroy/taas-loan/actions/workflows/ci.yml)
+
 A WordPress plugin for sharing books, DVDs, tools, toys or any other object with your community. Members can borrow, comment on and rate items, and admins can track who borrowed what and when.
 
 This is a fork of [Sharing Club](https://wordpress.org/plugins/sharing-club/) by [netdelight](http://netdelight.be/) (Manu Z.).
@@ -78,6 +80,22 @@ Yes. Save a spreadsheet as CSV and import it with a plugin like [Really Simple C
 ## Translating
 
 Translation files live in the `languages` folder (`.po` / `.mo`). Text domain: `sharing-club`.
+
+## Development
+
+Every push to `master` and every pull request is checked automatically on GitHub. To run the same checks on your computer:
+
+```sh
+npm install        # JavaScript and CSS tools
+npm run lint       # check JavaScript and CSS
+
+composer update    # PHP tools (needs PHP and Composer)
+composer lint      # check PHP for security, compatibility and translation issues
+
+bin/check-translations.sh   # check translation files (needs gettext)
+```
+
+The PHP check is in report-only mode for now while issues from the original plugin are fixed. See `PHPCS_BLOCKING` in `.github/workflows/ci.yml`.
 
 ## Changelog
 
