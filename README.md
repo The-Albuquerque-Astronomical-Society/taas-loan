@@ -10,8 +10,15 @@ TAAS lends telescopes, large binoculars, premium eyepieces and accessories to it
 
 - **Anyone** visiting the site can browse all the equipment and see whether each item is in or out.
 - **Members** log in to check out an item.
-- Loans last **30 days**.
 - The **Loan Program Manager (LPM)** handles requests, pickups and returns.
+
+### Loan rules
+
+- **Loan length:** a member can keep the equipment for **at least 30 days**.
+- **After 30 days:** the member returns it when the LPM asks. If the LPM doesn't ask, they can keep it as long as they like.
+- **Returning early:** a member can contact the LPM at any time to arrange a return.
+- **Late returns:** there are no late fees or penalties.
+- **Damage:** if equipment is damaged, the borrower contacts the LPM to arrange a repair. The borrower pays for the repair if they caused the damage.
 
 It's based on the [Sharing Club](https://wordpress.org/plugins/sharing-club/) plugin by Manu Z. (netdelight).
 
@@ -119,7 +126,9 @@ Found under **Settings > TAAS Loan Program**:
 Requested by the Loan Program Manager. More details are coming.
 
 - [ ] **In/Out status:** show a clear "In" or "Out" on every item. *Done in the `[taas_loan_items]` shortcode; the item page and `/shared_item/` list still to do.*
-- [ ] **30-day reminders:** email the LPM when a loan reaches 30 days.
+- [ ] **30-day reminders:** email the LPM when a loan reaches 30 days, so they can decide whether to ask for it back. (Not an "overdue" notice: there are no late returns.)
+- [ ] **No fixed return date:** let the LPM leave the return date empty, so an item stays **Out** until it's actually returned.
+- [ ] **Show the loan rules on the site:** so members see them before they request an item.
 - [ ] **LPM email setting:** send request and reminder emails to the LPM, not the site's admin email.
 - [ ] **Waiting list:** let members request an item that's out, and show the LPM who's waiting, in order.
 - [ ] **Join link:** point "register" links to the [TAAS membership page](https://taas.org/join-taas/) instead of WordPress sign-up.
