@@ -180,6 +180,8 @@ if ( ! class_exists( 'SCWP_Theme_Options' ) ) {
 
 				</form>
 
+				<?php do_action( 'scwp_settings_page_after' ); ?>
+
 			</div><!-- .wrap -->
 		<?php }
 
