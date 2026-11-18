@@ -38,7 +38,7 @@ It's based on the [Sharing Club](https://wordpress.org/plugins/sharing-club/) pl
 
 ## Requirements
 
-- WordPress 4.0 or later (tested up to 6.1.1)
+- WordPress 7.1 or later
 - PHP 7.4 or later
 - A theme that supports featured images, so equipment photos show up in the list
 
