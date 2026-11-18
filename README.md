@@ -126,7 +126,9 @@ Found under **Settings > TAAS Loan Program**:
 | Login page | Where the **Log in to request** button goes | Leave empty: it finds the `/login/` page |
 | Loan Manager email | Who gets the email when a member requests an item. Separate several with commas | The Loan Program Manager's address. Empty uses the site admin email |
 | Mobile / Home phone field | Which [Participants Database](https://xnau.com/work/wordpress-plugins/participants-database/) fields go in the request email | Leave on **Automatic** if it shows the right fields |
+| Send emails from | The address request emails come from (shown as "TAAS Loan Program") | Leave empty for `noreply@` this site's domain |
 | Send test email | Sends a sample request (with you as the member) to the Loan Manager email | Try it after saving |
+| Private test link | A link that sends a test email without logging in. Anyone with it can send one (at most once a minute), so keep it private. **Make a new link** turns off the old one | Bookmark it |
 
 ### Starting over
 
