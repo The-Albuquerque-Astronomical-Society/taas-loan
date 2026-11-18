@@ -20,12 +20,45 @@ class TAAS_Loan_Notify {
 	/** Admin-post action for the "Send test email" button. */
 	const TEST_ACTION = 'taas_loan_test_email';
 
+	/** Admin-post action for the private test link (works without logging in). */
+	const LINK_ACTION = 'taas_loan_test_link';
+
+	/** Admin-post action that replaces the private test link. */
+	const RESET_ACTION = 'taas_loan_test_link_reset';
+
+	/** Option holding the private test link's secret key. */
+	const LINK_KEY_OPTION = 'taas_loan_test_link_key';
+
+	/**
+	 * Why the last email failed, if it did.
+	 *
+	 * @var string
+	 */
+	private static $last_error = '';
+
 	/**
 	 * Register hooks.
 	 */
 	public static function init() {
 		add_action( 'admin_post_' . self::TEST_ACTION, array( __CLASS__, 'handle_test_email' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'test_email_notice' ) );
+		add_action( 'admin_post_nopriv_' . self::LINK_ACTION, array( __CLASS__, 'handle_test_link' ) );
+		add_action( 'admin_post_' . self::LINK_ACTION, array( __CLASS__, 'handle_test_link' ) );
+		add_action( 'admin_post_' . self::RESET_ACTION, array( __CLASS__, 'handle_reset_link' ) );
+	}
+
+	/**
+	 * Address the emails come from.
+	 *
+	 * @return string
+	 */
+	public static function from_email() {
+		$email = (string) scwp_get_option( 'from_email' );
+		if ( is_email( $email ) ) {
+			return $email;
+		}
+		$host = preg_replace( '/^www\./', '', (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+		return 'noreply@' . $host;
 	}
 
 	/**
@@ -89,7 +122,23 @@ class TAAS_Loan_Notify {
 			$headers[] = 'Reply-To: ' . self::header_safe( $member['name'] ) . ' <' . $member['email'] . '>';
 		}
 
-		return wp_mail( $to, wp_specialchars_decode( $subject, ENT_QUOTES ), self::email_html( $post, $member ), $headers );
+		$headers[] = 'From: ' . self::header_safe( __( 'TAAS Loan Program', 'sharing-club' ) ) . ' <' . self::from_email() . '>';
+
+		// Send with a matching return address, so mail services like Gmail trust it,
+		// and remember why it failed, if it does.
+		$sender = static function ( $phpmailer ) {
+			$phpmailer->Sender = self::from_email(); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- PHPMailer property.
+		};
+		$failed = static function ( $error ) {
+			self::$last_error = $error->get_error_message();
+		};
+		self::$last_error = '';
+		add_action( 'phpmailer_init', $sender );
+		add_action( 'wp_mail_failed', $failed );
+		$sent = wp_mail( $to, wp_specialchars_decode( $subject, ENT_QUOTES ), self::email_html( $post, $member ), $headers );
+		remove_action( 'phpmailer_init', $sender );
+		remove_action( 'wp_mail_failed', $failed );
+		return $sent;
 	}
 
 	/**
@@ -358,6 +407,13 @@ class TAAS_Loan_Notify {
 				<p class="description"><?php esc_html_e( 'Who gets an email when a member requests an item. Separate several addresses with commas. Leave empty to use the site admin email.', 'sharing-club' ); ?></p>
 			</td>
 		</tr>
+		<tr>
+			<th scope="row"><label for="scwp-from-email"><?php esc_html_e( 'Send emails from', 'sharing-club' ); ?></label></th>
+			<td>
+				<input type="email" id="scwp-from-email" class="regular-text" name="scwp_options[from_email]" value="<?php echo esc_attr( scwp_get_option( 'from_email' ) ); ?>" placeholder="<?php echo esc_attr( self::from_email() ); ?>">
+				<p class="description"><?php esc_html_e( 'The address request emails come from. Use one at this site\'s own domain so Gmail doesn\'t treat them as spam. Leave empty for the one shown.', 'sharing-club' ); ?></p>
+			</td>
+		</tr>
 		<?php
 		foreach ( array(
 			'mobile' => __( 'Mobile phone field', 'sharing-club' ),
@@ -401,6 +457,16 @@ class TAAS_Loan_Notify {
 				<p class="description"><?php esc_html_e( 'Sends a sample request, using your own account as the member, to the Loan Manager email. Save your changes first.', 'sharing-club' ); ?></p>
 			</td>
 		</tr>
+		<tr>
+			<th scope="row"><label for="scwp-test-link"><?php esc_html_e( 'Private test link', 'sharing-club' ); ?></label></th>
+			<td>
+				<input type="text" id="scwp-test-link" class="large-text code" readonly onfocus="this.select()" value="<?php echo esc_attr( self::test_link_url() ); ?>">
+				<p class="description">
+					<?php esc_html_e( 'Bookmark this to send a test email any time, without logging in. It works for anyone who has it, so keep it private.', 'sharing-club' ); ?>
+					<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=' . self::RESET_ACTION ), self::RESET_ACTION ) ); ?>"><?php esc_html_e( 'Make a new link', 'sharing-club' ); ?></a>
+				</p>
+			</td>
+		</tr>
 		<?php
 	}
 
@@ -424,6 +490,13 @@ class TAAS_Loan_Notify {
 			unset( $options['manager_email'] );
 		}
 
+		$from = sanitize_email( trim( (string) ( $options['from_email'] ?? '' ) ) );
+		if ( is_email( $from ) ) {
+			$options['from_email'] = $from;
+		} else {
+			unset( $options['from_email'] );
+		}
+
 		$fields = self::pdb_fields();
 		foreach ( array( 'pdb_mobile_field', 'pdb_home_field' ) as $key ) {
 			$value = sanitize_key( $options[ $key ] ?? '' );
@@ -445,6 +518,27 @@ class TAAS_Loan_Notify {
 		}
 		check_admin_referer( self::TEST_ACTION );
 
+		$result = self::send_test( wp_get_current_user() );
+		wp_safe_redirect(
+			add_query_arg(
+				'taas_test_email',
+				$result,
+				admin_url( 'options-general.php?page=theme-settings' )
+			)
+		);
+		exit;
+	}
+
+	/**
+	 * Send a sample request email about the first item.
+	 *
+	 * @param WP_User|false $user Member to show in the email.
+	 * @return string 'sent', 'failed', 'noitems' or 'nouser'.
+	 */
+	private static function send_test( $user ) {
+		if ( ! $user || ! $user->exists() ) {
+			return 'nouser';
+		}
 		$items = get_posts(
 			array(
 				'post_type'      => 'shared_item',
@@ -452,15 +546,94 @@ class TAAS_Loan_Notify {
 				'posts_per_page' => 1,
 			)
 		);
-		$sent  = $items ? self::send( $items[0], wp_get_current_user(), self::manager_emails(), true ) : false;
+		if ( ! $items ) {
+			return 'noitems';
+		}
+		return self::send( $items[0], $user, self::manager_emails(), true ) ? 'sent' : 'failed';
+	}
 
-		wp_safe_redirect(
-			add_query_arg(
-				'taas_test_email',
-				$sent ? 'sent' : ( $items ? 'failed' : 'noitems' ),
-				admin_url( 'options-general.php?page=theme-settings' )
-			)
+	/**
+	 * The private test link's secret key, made on first use.
+	 *
+	 * @return string
+	 */
+	private static function link_key() {
+		$key = (string) get_option( self::LINK_KEY_OPTION );
+		if ( strlen( $key ) < 20 ) {
+			$key = wp_generate_password( 32, false );
+			update_option( self::LINK_KEY_OPTION, $key, false );
+		}
+		return $key;
+	}
+
+	/**
+	 * The private test link.
+	 *
+	 * @return string
+	 */
+	public static function test_link_url() {
+		return add_query_arg(
+			array(
+				'action' => self::LINK_ACTION,
+				'key'    => self::link_key(),
+			),
+			admin_url( 'admin-post.php' )
 		);
+	}
+
+	/**
+	 * Send a test email from the private link, and say how it went.
+	 */
+	public static function handle_test_link() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- the secret key is the check.
+		$key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
+		if ( '' === $key || ! hash_equals( self::link_key(), $key ) ) {
+			wp_die( esc_html__( 'This test link is not valid. Copy the current one from Settings > TAAS Loan Program.', 'sharing-club' ), esc_html__( 'Test email', 'sharing-club' ), array( 'response' => 403 ) );
+		}
+		if ( get_transient( 'taas_loan_test_link_sent' ) ) {
+			wp_die( esc_html__( 'A test email was just sent. Wait a minute before sending another.', 'sharing-club' ), esc_html__( 'Test email', 'sharing-club' ), array( 'response' => 429 ) );
+		}
+		set_transient( 'taas_loan_test_link_sent', 1, MINUTE_IN_SECONDS );
+
+		// Show the Loan Manager as the member, or the first site admin.
+		$user = get_user_by( 'email', self::manager_emails()[0] );
+		if ( ! $user ) {
+			$admins = get_users(
+				array(
+					'role'   => 'administrator',
+					'number' => 1,
+				)
+			);
+			$user   = $admins ? $admins[0] : false;
+		}
+
+		$result = self::send_test( $user );
+		$to     = implode( ', ', self::manager_emails() );
+		if ( 'sent' === $result ) {
+			/* translators: 1: recipient address(es), 2: sender address. */
+			$message = sprintf( __( 'Test email sent to %1$s from %2$s. If it doesn\'t arrive in a few minutes, check the spam folder. If it\'s not there either, the web host isn\'t delivering the site\'s email and an SMTP plugin is needed.', 'sharing-club' ), $to, self::from_email() );
+		} elseif ( 'failed' === $result ) {
+			/* translators: %s: error message from the mail system. */
+			$message = sprintf( __( 'The email could not be sent. The mail system said: %s', 'sharing-club' ), self::$last_error ? self::$last_error : __( 'no reason given', 'sharing-club' ) );
+		} elseif ( 'noitems' === $result ) {
+			$message = __( 'Add at least one item before sending a test email.', 'sharing-club' );
+		} else {
+			$message = __( 'No user account found to show as the member.', 'sharing-club' );
+		}
+		wp_die( '<p>' . esc_html( $message ) . '</p>', esc_html__( 'Test email', 'sharing-club' ), array( 'response' => 200 ) );
+	}
+
+	/**
+	 * Replace the private test link, so the old one stops working.
+	 */
+	public static function handle_reset_link() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to do that.', 'sharing-club' ) );
+		}
+		check_admin_referer( self::RESET_ACTION );
+		delete_option( self::LINK_KEY_OPTION );
+		self::link_key();
+		wp_safe_redirect( add_query_arg( 'taas_test_email', 'newlink', admin_url( 'options-general.php?page=theme-settings' ) ) );
 		exit;
 	}
 
@@ -478,6 +651,7 @@ class TAAS_Loan_Notify {
 			'sent'    => array( 'success', sprintf( __( 'Test email sent to %s.', 'sharing-club' ), implode( ', ', self::manager_emails() ) ) ),
 			'failed'  => array( 'error', __( 'The test email could not be sent. Check that this site can send email (an SMTP plugin may be needed).', 'sharing-club' ) ),
 			'noitems' => array( 'warning', __( 'Add at least one item before sending a test email.', 'sharing-club' ) ),
+			'newlink' => array( 'success', __( 'Made a new private test link. The old one no longer works.', 'sharing-club' ) ),
 		);
 		if ( isset( $messages[ $result ] ) ) {
 			printf( '<div class="notice notice-%1$s is-dismissible"><p>%2$s</p></div>', esc_attr( $messages[ $result ][0] ), esc_html( $messages[ $result ][1] ) );
