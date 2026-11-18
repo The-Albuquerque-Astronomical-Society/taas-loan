@@ -1,11 +1,12 @@
 <?php
 /*
-Plugin Name: Sharing Club
-Plugin URI: https://wordpress.org/plugins/sharing-club/
-Description: Share books, dvd, tools, toys or any object with your community. Your users can easily lend, borrow and rate items and you know who borrowed what.
-Author: Manu Z.
+Plugin Name: TAAS Loan Program
+Plugin URI: https://github.com/joeytroy/taas-loan
+Update URI: false
+Description: Share books, dvd, tools, toys or any object with your community. Your users can easily lend, borrow and rate items and you know who borrowed what. Based on the Sharing Club plugin (https://wordpress.org/plugins/sharing-club/) by Manu Z. (netdelight).
+Author: Joey Troy
 Version: 1.3.1
-Author URI: http://netdelight.be/
+Author URI: https://github.com/joeytroy
 Text Domain: sharing-club
 Domain Path: /languages/
 */
@@ -64,7 +65,7 @@ function scwp_init() {
         $object = array(
             'label' => __('Objects', 'sharing-club'),
             'labels' => array(
-              'name' => __('Sharing Club', 'sharing-club'),
+              'name' => __('TAAS Loan Program', 'sharing-club'),
               'singular_name' => __('Objects', 'sharing-club'),
               'all_items' => __('All objects', 'sharing-club'),
               'add_new_item' => __('Add object', 'sharing-club'),

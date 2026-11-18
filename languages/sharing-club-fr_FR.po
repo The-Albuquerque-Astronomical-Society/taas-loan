@@ -110,12 +110,12 @@ msgstr "Marquer comme rendu"
 #. Name of the plugin
 #: admin-options.php:60 admin-options.php:61 admin-options.php:133 
 #: sharing-club.php:67
-msgid "Sharing Club"
-msgstr "Sharing Club"
+msgid "TAAS Loan Program"
+msgstr "TAAS Loan Program"
 
 #: admin-options.php:143
-msgid "Make Sharing Club public (visible without login)"
-msgstr "Rendre Sharing Club public (visible sans connexion)"
+msgid "Make TAAS Loan Program public (visible without login)"
+msgstr "Rendre TAAS Loan Program public (visible sans connexion)"
 
 #: admin-options.php:150
 msgid "Hide the comment form"

@@ -1,6 +1,6 @@
 <?php
 /**
- * Create the Sharing Club settings page
+ * Create the TAAS Loan Program settings page
  *
  */
 
@@ -57,8 +57,8 @@ if ( ! class_exists( 'SCWP_Theme_Options' ) ) {
 		 */
 		public static function add_admin_menu() {
 			add_options_page(
-				esc_html__( 'Sharing Club', 'sharing-club' ),
-				esc_html__( 'Sharing Club', 'sharing-club' ),
+				esc_html__( 'TAAS Loan Program', 'sharing-club' ),
+				esc_html__( 'TAAS Loan Program', 'sharing-club' ),
 				'manage_options',
 				'theme-settings',
 				array( 'SCWP_Theme_Options', 'create_admin_page' )
@@ -130,7 +130,7 @@ if ( ! class_exists( 'SCWP_Theme_Options' ) ) {
 
 			<div class="wrap">
 
-				<h1><?php esc_html_e( 'Sharing Club', 'sharing-club' ); ?></h1>
+				<h1><?php esc_html_e( 'TAAS Loan Program', 'sharing-club' ); ?></h1>
 
 				<form method="post" action="options.php">
 
@@ -140,7 +140,7 @@ if ( ! class_exists( 'SCWP_Theme_Options' ) ) {
 
 						<?php // Checkbox example ?>
 						<tr valign="top">
-							<th scope="row"><?php esc_html_e( 'Make Sharing Club public (visible without login)', 'sharing-club' ); ?></th>
+							<th scope="row"><?php esc_html_e( 'Make TAAS Loan Program public (visible without login)', 'sharing-club' ); ?></th>
 							<td>
 								<?php $value = self::get_scwp_option( 'public' ); ?>
 								<input type="checkbox" name="scwp_options[public]" <?php checked( $value, 'on' ); ?>>

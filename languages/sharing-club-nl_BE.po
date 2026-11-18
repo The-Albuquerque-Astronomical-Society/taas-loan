@@ -147,8 +147,8 @@ msgstr "Objecten"
 #. #-#-#-#-#  sharing-club-code.pot (Sharing Club 1.1)  #-#-#-#-#
 #. Plugin Name of the plugin/theme
 #: sharing-club.php:67
-msgid "Sharing Club"
-msgstr "Sharing Club"
+msgid "TAAS Loan Program"
+msgstr "TAAS Loan Program"
 
 #: sharing-club.php:69
 msgid "All objects"
