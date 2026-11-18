@@ -1,6 +1,6 @@
 # TAAS Loan Program
 
-[![CI](https://github.com/joeytroy/taas-loan/actions/workflows/ci.yml/badge.svg)](https://github.com/joeytroy/taas-loan/actions/workflows/ci.yml)
+[![CI](https://github.com/The-Albuquerque-Astronomical-Society/taas-loan/actions/workflows/ci.yml/badge.svg)](https://github.com/The-Albuquerque-Astronomical-Society/taas-loan/actions/workflows/ci.yml)
 
 A WordPress plugin that runs the [Telescope Loan Program](https://taas.org/telescope-loan-program/) for **The Albuquerque Astronomical Society (TAAS)**.
 
