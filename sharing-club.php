@@ -231,7 +231,7 @@ function scwp_custom_post_templates($template) {
     if ( $exists_in_theme != '' ) {
         $template = $exists_in_theme;
     }else{
-        wp_enqueue_style( 'scwp-public', plugin_dir_url( __FILE__ ) . 'css/lending-library-public.css');
+        TAAS_Loan_Shortcodes::enqueue_style();
         wp_enqueue_script( 'scwp-public', plugin_dir_url( __FILE__ ) . 'js/lending-library-public.js', array( 'jquery', 'jquery-ui-datepicker' ) );
         if ( is_post_type_archive ( 'shared_item' ) ) {
             /* Checks for archive template */
@@ -255,7 +255,8 @@ function scwp_process_data(){
         global $post, $wpdb;
         if(isset($_POST['comment_ID']) || isset($_POST['iwantit'])){
             if( $post->post_type == 'shared_item' && is_user_logged_in() ){
-                if(isset($_REQUEST['iwantit']) && isset( $_POST['booking_nonce'] ) && wp_verify_nonce( $_POST['booking_nonce'], 'booking' )){
+                $scwp_loan = TAAS_Loan_Shortcodes::loan( get_the_ID() );
+                if(isset($_REQUEST['iwantit']) && isset( $_POST['booking_nonce'] ) && wp_verify_nonce( $_POST['booking_nonce'], 'booking' ) && 'in' === $scwp_loan['status']){
                     // email notification
                     $to = get_option('admin_email');
                     $headers = array('Content-Type: text/html; charset=UTF-8');
@@ -278,7 +279,8 @@ function scwp_process_data(){
                     if(isset($_POST['comment_content'])) $vars['comment_content'] = sanitize_text_field($_POST['comment_content']);
                     $validation = scwp_validate_lending($vars);
                     if($validation){
-                        $wpdb->update( $wpdb->comments, $vars, array('comment_ID'=>$comment_ID));   
+                        // Only the member's own loan record can be reviewed.
+                        $wpdb->update( $wpdb->comments, $vars, array('comment_ID'=>$comment_ID, 'user_id'=>get_current_user_id(), 'comment_type'=>'lending'));
                     }else{
                         echo $validation;
                         exit();

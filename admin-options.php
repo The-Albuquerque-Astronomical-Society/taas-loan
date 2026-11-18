@@ -100,6 +100,15 @@ if ( ! class_exists( 'SCWP_Theme_Options' ) ) {
 				} else {
 					unset( $options['hide_comments'] ); // Remove from options if not checked
 				}
+
+				// Links
+				foreach ( array( 'join_url', 'login_url' ) as $key ) {
+					if ( ! empty( $options[ $key ] ) ) {
+						$options[ $key ] = esc_url_raw( trim( $options[ $key ] ) );
+					} else {
+						unset( $options[ $key ] );
+					}
+				}
                 /*
 
 				// Input
@@ -151,6 +160,20 @@ if ( ! class_exists( 'SCWP_Theme_Options' ) ) {
 							<td>
 								<?php $value = self::get_scwp_option( 'hide_comments' ); ?>
 								<input type="checkbox" name="scwp_options[hide_comments]" <?php checked( $value, 'on' ); ?>>
+							</td>
+						</tr>
+						<tr valign="top">
+							<th scope="row"><label for="scwp-join-url"><?php esc_html_e( 'Join page', 'sharing-club' ); ?></label></th>
+							<td>
+								<input type="url" id="scwp-join-url" class="regular-text" name="scwp_options[join_url]" value="<?php echo esc_attr( self::get_scwp_option( 'join_url' ) ); ?>" placeholder="<?php echo esc_attr( TAAS_Loan_Shortcodes::join_url() ); ?>">
+								<p class="description"><?php esc_html_e( 'Where visitors go to join TAAS. Leave empty to use the page at /join-taas/.', 'sharing-club' ); ?></p>
+							</td>
+						</tr>
+						<tr valign="top">
+							<th scope="row"><label for="scwp-login-url"><?php esc_html_e( 'Login page', 'sharing-club' ); ?></label></th>
+							<td>
+								<input type="url" id="scwp-login-url" class="regular-text" name="scwp_options[login_url]" value="<?php echo esc_attr( self::get_scwp_option( 'login_url' ) ); ?>" placeholder="<?php echo esc_attr( TAAS_Loan_Shortcodes::login_url() ); ?>">
+								<p class="description"><?php esc_html_e( 'Where members log in. Leave empty to use the page at /login/, or the WordPress login.', 'sharing-club' ); ?></p>
 							</td>
 						</tr>
 <!--

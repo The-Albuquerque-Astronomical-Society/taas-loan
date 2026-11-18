@@ -69,15 +69,24 @@ Add this shortcode to any page or post (for example the existing Telescope Loan 
 [taas_loan_items]
 ```
 
-It shows every item as a card with its picture, name and an **In / Out / Requested** label, grouped by category. Clicking a card opens the item page, where members can request it. Borrowers' names are never shown.
+It works like the old Vik Rent Items pages:
+
+1. **Category cards:** a card with a picture and name for each category (Telescopes, Premium Eyepieces, Accessories).
+2. **Click a category:** the same page lists its items. Each has a picture, name, short description, an **In / Out / Requested** label and a **View details** button.
+3. **Click an item:** a clean item page with a big picture, the full description and its status. Members can **Request this item**. Visitors who aren't logged in can still see everything, plus a box with **Log in to request** and **Join TAAS** buttons.
+
+Borrowers' names are never shown. The old `/shared_item/` address and category addresses forward to this page.
+
+Category pictures and descriptions come from Vik Rent Items when you import. Categories without a picture use their first item's picture.
 
 Options:
 
 | Shortcode | What it shows |
 | --- | --- |
-| `[taas_loan_items]` | All equipment, grouped by category |
-| `[taas_loan_items category="telescopes"]` | Only one category (use the category's slug) |
-| `[taas_loan_items category="telescopes,accessories"]` | Several categories, in the order you list them |
+| `[taas_loan_items]` | Category cards; click one to see its items |
+| `[taas_loan_items view="list"]` | Every item as a list, grouped by category |
+| `[taas_loan_items view="grid"]` | Every item as picture cards, grouped by category |
+| `[taas_loan_items category="telescopes,accessories"]` | Only these categories (use the slugs), in this order |
 | `[taas_loan_items status="no"]` | Hide the In / Out labels |
 
 In the block editor, add a **Shortcode** block and paste it in.
@@ -113,6 +122,8 @@ Found under **Settings > TAAS Loan Program**:
 | --- | --- | --- |
 | Make public (visible without login) | Lets anyone see the equipment list, not just logged-in members | **On.** Anyone can browse; checking out still needs a member login. |
 | Hide rating and comment form | Turns off member reviews | Your choice |
+| Join page | Where the **Join TAAS** button goes | Leave empty: it finds the `/join-taas/` page |
+| Login page | Where the **Log in to request** button goes | Leave empty: it finds the `/login/` page |
 
 ### Starting over
 
@@ -132,14 +143,14 @@ On the command line: `wp taas-loan reset` (add `--keep-pictures` to keep the pic
 
 Requested by the Loan Program Manager. More details are coming.
 
-- [ ] **In/Out status:** show a clear "In" or "Out" on every item. *Done in the `[taas_loan_items]` shortcode; the item page and `/shared_item/` list still to do.*
+- [x] **In/Out status:** show a clear "In" or "Out" on every item, in the list and on the item page.
 - [ ] **30-day reminders:** email the LPM when a loan reaches 30 days, so they can decide whether to ask for it back. (Not an "overdue" notice: there are no late returns.)
 - [ ] **No fixed return date:** let the LPM leave the return date empty, so an item stays **Out** until it's actually returned.
 - [ ] **Show the loan rules on the site:** so members see them before they request an item.
 - [ ] **LPM email setting:** send request and reminder emails to the LPM, not the site's admin email.
 - [ ] **Waiting list:** let members request an item that's out, and show the LPM who's waiting, in order.
-- [ ] **Join link:** point "register" links to the [TAAS membership page](https://taas.org/join-taas/) instead of WordPress sign-up.
-- [ ] **Privacy:** don't show the borrower's username to the public when the list is public. *Done in the shortcode; the item page and `/shared_item/` list still to do.*
+- [x] **Join link:** point "register" links to the [TAAS membership page](https://taas.org/join-taas/) instead of WordPress sign-up.
+- [x] **Privacy:** don't show the borrower's username to the public.
 
 ## Customizing the look
 

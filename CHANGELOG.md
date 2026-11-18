@@ -12,6 +12,10 @@ All notable changes to this project are listed here.
 - The importer now creates categories in the same order as Vik Rent Items.
 - The importer now creates one entry per unit for items with more than one ("Name #1", "Name #2"), sharing the same pictures.
 - The importer now runs in small batches with a progress message, so big imports don't hit the web host's time limit (504 Gateway Timeout). Re-running also adds missing pictures to items that were already imported.
+- New look modelled on the old Vik Rent Items pages: `[taas_loan_items]` shows category cards, clicking one lists its items (picture, short description, status, View details), and item pages show a clean card with a big picture and full description.
+- Item pages are visible to everyone, even when the site shows a members-only notice. Visitors get **Log in to request** / **Join TAAS** buttons instead of a WordPress "register" link. New **Join page** and **Login page** settings.
+- The importer now also brings over each item's short description and each category's picture and description, and fills these in on items imported earlier.
+- Security: members can only review their own loans (before, the review form could change any comment on the site), and an item that's already out can't be requested again.
 - Added **Delete all data** at the bottom of Settings > TAAS Loan Program (and `wp taas-loan reset`) to start over.
 
 ## [1.3.1] - 2022-12-02
