@@ -329,6 +329,16 @@ article .entry-header.entry-header{
     height: 100% !important;
     object-fit: cover;
 }
+/* Small photos: show whole at real size, never stretched. */
+.taas-loan .taas-loan-cat-image img.taas-loan-img-small {
+    inset: 0;
+    width: auto !important;
+    height: auto !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    margin: auto;
+    object-fit: contain;
+}
 .taas-loan-cat-name {
     display: block;
     padding: 0.9em 1.1em;
