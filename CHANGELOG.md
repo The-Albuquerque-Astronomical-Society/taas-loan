@@ -7,6 +7,7 @@ All notable changes to this project are listed here.
 - Renamed the plugin to TAAS Loan Program (forked from Sharing Club by netdelight).
 - Turned off automatic updates from WordPress.org so the original plugin can't overwrite this fork.
 - Added README, CHANGELOG and LICENSE files.
+- Added an importer that copies equipment (names, descriptions, categories and pictures) from Vik Rent Items. Find it at TAAS Loan Program > Import, or run `wp taas-loan import-vri`.
 
 ## [1.3.1] - 2022-12-02
 
