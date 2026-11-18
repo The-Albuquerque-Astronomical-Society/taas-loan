@@ -52,7 +52,28 @@ It's based on the [Sharing Club](https://wordpress.org/plugins/sharing-club/) pl
    - **Description:** what's included, how to set it up, any care tips
    - **Featured image:** a photo of the item
    - **Excerpt:** a private note for volunteers (e.g. inventory number). Members don't see it.
-3. Members can then browse the equipment at `https://your-site.com/shared_item/`.
+3. Members can then browse the equipment at `https://your-site.com/shared_item/`, or on any page where you add the shortcode below.
+
+## Showing the equipment on a page
+
+Add this shortcode to any page or post (for example the existing Telescope Loan Program page):
+
+```
+[taas_loan_items]
+```
+
+It shows every item as a card with its picture, name and an **In / Out / Requested** label, grouped by category. Clicking a card opens the item page, where members can request it. Borrowers' names are never shown.
+
+Options:
+
+| Shortcode | What it shows |
+| --- | --- |
+| `[taas_loan_items]` | All equipment, grouped by category |
+| `[taas_loan_items category="telescopes"]` | Only one category (use the category's slug) |
+| `[taas_loan_items category="telescopes,accessories"]` | Several categories, in the order you list them |
+| `[taas_loan_items status="no"]` | Hide the In / Out labels |
+
+In the block editor, add a **Shortcode** block and paste it in.
 
 ### Moving over from Vik Rent Items
 
@@ -97,12 +118,12 @@ Found under **Settings > TAAS Loan Program**:
 
 Requested by the Loan Program Manager. More details are coming.
 
-- [ ] **In/Out status:** show a clear "In" or "Out" on every item, in the list and on the item page.
+- [ ] **In/Out status:** show a clear "In" or "Out" on every item. *Done in the `[taas_loan_items]` shortcode; the item page and `/shared_item/` list still to do.*
 - [ ] **30-day reminders:** email the LPM when a loan reaches 30 days.
 - [ ] **LPM email setting:** send request and reminder emails to the LPM, not the site's admin email.
 - [ ] **Waiting list:** let members request an item that's out, and show the LPM who's waiting, in order.
 - [ ] **Join link:** point "register" links to the [TAAS membership page](https://taas.org/join-taas/) instead of WordPress sign-up.
-- [ ] **Privacy:** don't show the borrower's username to the public when the list is public.
+- [ ] **Privacy:** don't show the borrower's username to the public when the list is public. *Done in the shortcode; the item page and `/shared_item/` list still to do.*
 
 ## Customizing the look
 

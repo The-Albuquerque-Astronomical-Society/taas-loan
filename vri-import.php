@@ -227,6 +227,13 @@ class TAAS_VRI_Importer {
 		$categories = self::get_categories();
 		$term_cache = array();
 
+		// Create the categories up front, in Vik Rent Items order, so lists show them in that order.
+		if ( ! $dry_run ) {
+			foreach ( $categories as $category_name ) {
+				self::get_term_id( $category_name, $term_cache );
+			}
+		}
+
 		foreach ( self::get_items() as $item ) {
 			$vri_id = (int) $item['id'];
 			$name   = wp_strip_all_tags( (string) $item['name'] );

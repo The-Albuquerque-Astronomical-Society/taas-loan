@@ -289,3 +289,6 @@ require_once plugin_dir_path( __FILE__ ) . 'admin-options.php';
 // IMPORT FROM VIK RENT ITEMS
 require_once plugin_dir_path( __FILE__ ) . 'vri-import.php';
 
+// SHORTCODES
+require_once plugin_dir_path( __FILE__ ) . 'shortcodes.php';
+
