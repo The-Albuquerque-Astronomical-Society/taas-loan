@@ -286,3 +286,6 @@ add_action( 'template_redirect', 'scwp_process_data' );
 // ADMIN OPTION PAGE
 require_once plugin_dir_path( __FILE__ ) . 'admin-options.php';
 
+// IMPORT FROM VIK RENT ITEMS
+require_once plugin_dir_path( __FILE__ ) . 'vri-import.php';
+

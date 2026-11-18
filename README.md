@@ -54,7 +54,27 @@ It's based on the [Sharing Club](https://wordpress.org/plugins/sharing-club/) pl
    - **Excerpt:** a private note for volunteers (e.g. inventory number). Members don't see it.
 3. Members can then browse the equipment at `https://your-site.com/shared_item/`.
 
-Have a lot of equipment? Put it in a spreadsheet, save it as CSV, and import it with a plugin like [Really Simple CSV Importer](https://wordpress.org/plugins/really-simple-csv-importer/).
+### Moving over from Vik Rent Items
+
+If the site already lists the equipment in **Vik Rent Items**, you can copy it all over instead of typing it in:
+
+1. Install and activate this plugin on the **same WordPress site** that runs Vik Rent Items.
+2. Go to **TAAS Loan Program > Import**.
+3. Check the preview, then click **Import**.
+
+For each item it copies the **name, description, categories, main picture and extra pictures**. The pictures go into the Media Library.
+
+- Vik Rent Items itself isn't changed, so you can keep it running until you're ready to switch.
+- It's safe to run again: items that were already imported are skipped.
+- Items hidden in Vik Rent Items come in as **drafts**.
+- An item with more than one unit (e.g. 2 identical eyepieces) comes in once. The page lists these so you can add the copies by hand.
+
+On the command line (WP-CLI), the same import is:
+
+```sh
+wp taas-loan import-vri --dry-run   # preview only
+wp taas-loan import-vri             # import
+```
 
 ## Settings
 
