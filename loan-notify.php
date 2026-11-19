@@ -124,19 +124,14 @@ class TAAS_Loan_Notify {
 
 		$headers[] = 'From: ' . self::header_safe( __( 'TAAS Loan Program', 'sharing-club' ) ) . ' <' . self::from_email() . '>';
 
-		// Send with a matching return address, so mail services like Gmail trust it,
-		// and remember why it failed, if it does.
-		$sender = static function ( $phpmailer ) {
-			$phpmailer->Sender = self::from_email(); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- PHPMailer property.
-		};
+		// Remember why it failed, if it does. The return address is left to the
+		// host or a mail plugin such as WP Mail SMTP: setting it here got emails lost.
 		$failed = static function ( $error ) {
 			self::$last_error = $error->get_error_message();
 		};
 		self::$last_error = '';
-		add_action( 'phpmailer_init', $sender );
 		add_action( 'wp_mail_failed', $failed );
 		$sent = wp_mail( $to, wp_specialchars_decode( $subject, ENT_QUOTES ), self::email_html( $post, $member ), $headers );
-		remove_action( 'phpmailer_init', $sender );
 		remove_action( 'wp_mail_failed', $failed );
 		return $sent;
 	}
