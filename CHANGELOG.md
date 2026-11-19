@@ -22,6 +22,8 @@ All notable changes to this project are listed here.
 - New **Private test link** in settings: bookmark it to send a test email without logging in. The page says whether it worked and, if not, why.
 - Request emails now include a plain-text copy alongside the formatted one, which spam filters expect.
 - The test link page has an **email check** that sends four versions, from very basic up to the real email, to find out what's keeping emails from arriving.
+- Members now get a confirmation email when they request an item: their request arrived, and the Loan Director will be in touch to arrange pickup. Replying reaches the Loan Director. Turn it off with **Confirm requests to members** in settings. Test emails also send a sample of it.
+- Item pages now say "Loan Director" instead of "Loan Program Manager".
 
 ## [1.3.1] - 2022-12-02
 

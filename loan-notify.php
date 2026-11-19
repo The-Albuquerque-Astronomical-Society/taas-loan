@@ -93,7 +93,84 @@ class TAAS_Loan_Notify {
 		if ( ! $user || ! $post ) {
 			return false;
 		}
-		return self::send( $post, $user, self::manager_emails() );
+		$sent = self::send( $post, $user, self::manager_emails() );
+		if ( self::confirm_members() && is_email( $user->user_email ) ) {
+			self::send_confirmation( $post, $user, array( $user->user_email ) );
+		}
+		return $sent;
+	}
+
+	/**
+	 * Should members get a "we received your request" email?
+	 *
+	 * @return bool
+	 */
+	public static function confirm_members() {
+		return 'off' !== scwp_get_option( 'member_email' );
+	}
+
+	/**
+	 * Tell the member their request arrived and the Loan Director will be in touch.
+	 *
+	 * @param WP_Post  $post Item.
+	 * @param WP_User  $user Member.
+	 * @param string[] $to   Recipients (the member, or the Loan Manager for a test).
+	 * @param bool     $test Mark the subject as a test.
+	 * @return bool
+	 */
+	private static function send_confirmation( $post, $user, array $to, $test = false ) {
+		$member = self::member_contact( $user );
+		$item   = wp_specialchars_decode( get_the_title( $post ), ENT_QUOTES );
+
+		/* translators: %s: item name. */
+		$subject = sprintf( __( 'We received your request for %s', 'sharing-club' ), $item );
+		if ( $test ) {
+			/* translators: %s: email subject. */
+			$subject = sprintf( __( '[Test] %s', 'sharing-club' ), $subject );
+		}
+
+		// Replying reaches the Loan Director.
+		$reply = implode( ', ', self::manager_emails() );
+		return self::deliver( $to, $subject, self::confirmation_html( $post, $member ), self::confirmation_text( $post, $member ), $reply );
+	}
+
+	/**
+	 * Send an email with a TAAS Loan Program sender and a plain-text copy.
+	 *
+	 * @param string[] $to       Recipients.
+	 * @param string   $subject  Subject.
+	 * @param string   $html     HTML body, or '' to send plain text only.
+	 * @param string   $text     Plain-text body.
+	 * @param string   $reply_to Reply-To header value, or ''.
+	 * @return bool
+	 */
+	private static function deliver( array $to, $subject, $html, $text, $reply_to = '' ) {
+		$headers = array(
+			'Content-Type: ' . ( '' === $html ? 'text/plain' : 'text/html' ) . '; charset=UTF-8',
+			'From: ' . self::header_safe( __( 'TAAS Loan Program', 'sharing-club' ) ) . ' <' . self::from_email() . '>',
+		);
+		if ( '' !== $reply_to ) {
+			$headers[] = 'Reply-To: ' . str_replace( array( "\r", "\n" ), '', $reply_to );
+		}
+
+		// Remember why it failed, if it does. The return address is left to the
+		// host or a mail plugin such as WP Mail SMTP: setting it here got emails lost.
+		$failed = static function ( $error ) {
+			self::$last_error = $error->get_error_message();
+		};
+		// A plain-text copy alongside the HTML, which spam filters expect.
+		$alt = static function ( $phpmailer ) use ( $text ) {
+			$phpmailer->AltBody = $text; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- PHPMailer property.
+		};
+		self::$last_error = '';
+		add_action( 'wp_mail_failed', $failed );
+		if ( '' !== $html ) {
+			add_action( 'phpmailer_init', $alt );
+		}
+		$sent = wp_mail( $to, wp_specialchars_decode( $subject, ENT_QUOTES ), '' === $html ? $text : $html, $headers );
+		remove_action( 'phpmailer_init', $alt );
+		remove_action( 'wp_mail_failed', $failed );
+		return $sent;
 	}
 
 	/**
@@ -122,34 +199,13 @@ class TAAS_Loan_Notify {
 			$subject = $tag . ' ' . $subject;
 		}
 
-		$text    = self::email_text( $post, $member );
-		$headers = array( 'Content-Type: ' . ( 'text' === $kind ? 'text/plain' : 'text/html' ) . '; charset=UTF-8' );
+		// Replying goes straight to the member.
+		$reply = '';
 		if ( 'html' !== $kind && is_email( $member['email'] ) ) {
-			// Replying goes straight to the member.
-			$headers[] = 'Reply-To: ' . self::header_safe( $member['name'] ) . ' <' . $member['email'] . '>';
+			$reply = self::header_safe( $member['name'] ) . ' <' . $member['email'] . '>';
 		}
-
-		$headers[] = 'From: ' . self::header_safe( __( 'TAAS Loan Program', 'sharing-club' ) ) . ' <' . self::from_email() . '>';
-
-		// Remember why it failed, if it does. The return address is left to the
-		// host or a mail plugin such as WP Mail SMTP: setting it here got emails lost.
-		$failed = static function ( $error ) {
-			self::$last_error = $error->get_error_message();
-		};
-		// A plain-text copy alongside the HTML, which spam filters expect.
-		$alt = static function ( $phpmailer ) use ( $text ) {
-			$phpmailer->AltBody = $text; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- PHPMailer property.
-		};
-		self::$last_error = '';
-		add_action( 'wp_mail_failed', $failed );
-		if ( 'text' !== $kind ) {
-			add_action( 'phpmailer_init', $alt );
-		}
-		$body = 'text' === $kind ? $text : self::email_html( $post, $member );
-		$sent = wp_mail( $to, wp_specialchars_decode( $subject, ENT_QUOTES ), $body, $headers );
-		remove_action( 'phpmailer_init', $alt );
-		remove_action( 'wp_mail_failed', $failed );
-		return $sent;
+		$html = 'text' === $kind ? '' : self::email_html( $post, $member );
+		return self::deliver( $to, $subject, $html, self::email_text( $post, $member ), $reply );
 	}
 
 	/**
@@ -364,12 +420,9 @@ class TAAS_Loan_Notify {
 	 * @return string HTML.
 	 */
 	private static function email_html( $post, array $member ) {
-		$site     = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
-		$item     = get_the_title( $post );
-		$category = TAAS_Loan_Shortcodes::primary_category( $post->ID );
-		$when     = wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) );
-		$first    = strtok( $member['name'], ' ' );
-		$missing  = '<span style="color:#8a8f98;">' . esc_html__( 'Not on file', 'sharing-club' ) . '</span>';
+		$item    = get_the_title( $post );
+		$first   = strtok( $member['name'], ' ' );
+		$missing = '<span style="color:#8a8f98;">' . esc_html__( 'Not on file', 'sharing-club' ) . '</span>';
 
 		$rows = array(
 			__( 'Name', 'sharing-club' )     => esc_html( $member['name'] ),
@@ -392,20 +445,8 @@ class TAAS_Loan_Notify {
 				. '</p>';
 		}
 
-		$item_meta = $category ? esc_html( $category->name ) . ' &middot; ' : '';
-
 		ob_start();
 		?>
-<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 12px;">
-<tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
-	<tr><td style="background:#111827;padding:20px 28px;color:#ffffff;font-size:18px;font-weight:600;">
-		<?php echo esc_html( $site ); ?> &middot; <?php esc_html_e( 'Loan Program', 'sharing-club' ); ?>
-	</td></tr>
 	<tr><td style="padding:28px 28px 8px;">
 		<h1 style="margin:0 0 8px;font-size:22px;color:#111827;"><?php esc_html_e( 'New loan request', 'sharing-club' ); ?></h1>
 		<p style="margin:0;color:#374151;font-size:15px;line-height:1.5;">
@@ -416,13 +457,7 @@ class TAAS_Loan_Notify {
 		</p>
 	</td></tr>
 	<tr><td style="padding:16px 28px 0;">
-		<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;">
-			<tr><td style="padding:16px 20px;">
-				<div style="color:#5b6270;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;"><?php esc_html_e( 'Item', 'sharing-club' ); ?></div>
-				<a href="<?php echo esc_url( get_permalink( $post ) ); ?>" style="color:#111827;font-size:16px;font-weight:600;text-decoration:none;"><?php echo esc_html( $item ); ?></a>
-				<div style="color:#5b6270;font-size:13px;margin-top:4px;"><?php echo $item_meta . esc_html( $when ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $item_meta is escaped above. ?></div>
-			</td></tr>
-		</table>
+		<?php echo self::item_card_html( $post ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside. ?>
 	</td></tr>
 	<tr><td style="padding:16px 28px 0;">
 		<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:6px;">
@@ -442,6 +477,31 @@ class TAAS_Loan_Notify {
 		echo esc_html( sprintf( __( 'Reply to this email to contact %s directly.', 'sharing-club' ), $first ) );
 		?>
 	</td></tr>
+		<?php
+		return self::email_shell( (string) ob_get_clean() );
+	}
+
+	/**
+	 * Wrap email content in the TAAS Loan Program layout.
+	 *
+	 * @param string $rows Table rows (HTML) for the white card.
+	 * @return string HTML.
+	 */
+	private static function email_shell( $rows ) {
+		$site = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
+		ob_start();
+		?>
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+	<tr><td style="background:#111827;padding:20px 28px;color:#ffffff;font-size:18px;font-weight:600;">
+		<?php echo esc_html( $site ); ?> &middot; <?php esc_html_e( 'Loan Program', 'sharing-club' ); ?>
+	</td></tr>
+	<?php echo $rows; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped parts by the caller. ?>
 </table>
 </td></tr>
 </table>
@@ -449,6 +509,95 @@ class TAAS_Loan_Notify {
 </html>
 		<?php
 		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Item card for emails: name (linked), category and when it was requested.
+	 *
+	 * @param WP_Post $post Item.
+	 * @return string HTML.
+	 */
+	private static function item_card_html( $post ) {
+		$category = TAAS_Loan_Shortcodes::primary_category( $post->ID );
+		$meta     = ( $category ? $category->name . ' · ' : '' ) . wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) );
+		return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;"><tr><td style="padding:16px 20px;">'
+			. '<div style="color:#5b6270;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">' . esc_html__( 'Item', 'sharing-club' ) . '</div>'
+			. '<a href="' . esc_url( get_permalink( $post ) ) . '" style="color:#111827;font-size:16px;font-weight:600;text-decoration:none;">' . esc_html( get_the_title( $post ) ) . '</a>'
+			. '<div style="color:#5b6270;font-size:13px;margin-top:4px;">' . esc_html( $meta ) . '</div>'
+			. '</td></tr></table>';
+	}
+
+	/**
+	 * The member's confirmation email.
+	 *
+	 * @param WP_Post $post   Item.
+	 * @param array   $member From member_contact().
+	 * @return string HTML.
+	 */
+	private static function confirmation_html( $post, array $member ) {
+		$first = strtok( $member['name'], ' ' );
+		ob_start();
+		?>
+	<tr><td style="padding:28px 28px 8px;">
+		<h1 style="margin:0 0 8px;font-size:22px;color:#111827;"><?php esc_html_e( 'We received your request', 'sharing-club' ); ?></h1>
+		<p style="margin:0 0 12px;color:#374151;font-size:15px;line-height:1.5;">
+			<?php
+			/* translators: %s: member's first name. */
+			echo esc_html( sprintf( __( 'Hi %s,', 'sharing-club' ), $first ) );
+			?>
+		</p>
+		<p style="margin:0;color:#374151;font-size:15px;line-height:1.5;">
+			<?php
+			/* translators: %s: item name. */
+			echo wp_kses_post( sprintf( __( 'Thank you for your request to borrow %s. The Loan Director will be in touch soon to arrange pickup.', 'sharing-club' ), '<strong>' . esc_html( get_the_title( $post ) ) . '</strong>' ) );
+			?>
+		</p>
+	</td></tr>
+	<tr><td style="padding:16px 28px 0;">
+		<?php echo self::item_card_html( $post ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside. ?>
+	</td></tr>
+	<tr><td style="padding:20px 28px 0;">
+		<div style="color:#5b6270;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;"><?php esc_html_e( 'What happens next', 'sharing-club' ); ?></div>
+		<ol style="margin:0;padding-left:20px;color:#374151;font-size:15px;line-height:1.6;">
+			<li><?php esc_html_e( 'The Loan Director will contact you by email or phone.', 'sharing-club' ); ?></li>
+			<li><?php esc_html_e( 'Together you\'ll set a time to pick up the equipment.', 'sharing-club' ); ?></li>
+		</ol>
+	</td></tr>
+	<tr><td align="center" style="padding:28px;">
+		<a href="<?php echo esc_url( get_permalink( $post ) ); ?>" style="display:inline-block;background:#1d4ed8;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 26px;border-radius:6px;"><?php esc_html_e( 'View the item', 'sharing-club' ); ?></a>
+	</td></tr>
+	<tr><td style="padding:16px 28px 24px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:13px;line-height:1.5;">
+		<?php esc_html_e( 'Questions? Reply to this email to reach the Loan Director. Clear skies!', 'sharing-club' ); ?>
+	</td></tr>
+		<?php
+		return self::email_shell( (string) ob_get_clean() );
+	}
+
+	/**
+	 * The member's confirmation email as plain text.
+	 *
+	 * @param WP_Post $post   Item.
+	 * @param array   $member From member_contact().
+	 * @return string
+	 */
+	private static function confirmation_text( $post, array $member ) {
+		$item  = wp_specialchars_decode( get_the_title( $post ), ENT_QUOTES );
+		$lines = array(
+			/* translators: %s: member's first name. */
+			sprintf( __( 'Hi %s,', 'sharing-club' ), strtok( $member['name'], ' ' ) ),
+			'',
+			/* translators: %s: item name. */
+			sprintf( __( 'Thank you for your request to borrow %s. The Loan Director will be in touch soon to arrange pickup.', 'sharing-club' ), $item ),
+			'',
+			__( 'What happens next', 'sharing-club' ) . ':',
+			'1. ' . __( 'The Loan Director will contact you by email or phone.', 'sharing-club' ),
+			'2. ' . __( 'Together you\'ll set a time to pick up the equipment.', 'sharing-club' ),
+			'',
+			__( 'Item', 'sharing-club' ) . ': ' . get_permalink( $post ),
+			'',
+			__( 'Questions? Reply to this email to reach the Loan Director. Clear skies!', 'sharing-club' ),
+		);
+		return implode( "\n", $lines ) . "\n";
 	}
 
 	/**
@@ -478,6 +627,12 @@ class TAAS_Loan_Notify {
 			<td>
 				<input type="text" id="scwp-manager-email" class="regular-text" name="scwp_options[manager_email]" value="<?php echo esc_attr( scwp_get_option( 'manager_email' ) ); ?>" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>">
 				<p class="description"><?php esc_html_e( 'Who gets an email when a member requests an item. Separate several addresses with commas. Leave empty to use the site admin email.', 'sharing-club' ); ?></p>
+			</td>
+		</tr>
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Confirm requests to members', 'sharing-club' ); ?></th>
+			<td>
+				<label><input type="checkbox" name="scwp_options[member_email]" value="on" <?php checked( self::confirm_members() ); ?>> <?php esc_html_e( 'Email members that their request arrived and the Loan Director will be in touch', 'sharing-club' ); ?></label>
 			</td>
 		</tr>
 		<tr>
@@ -527,7 +682,7 @@ class TAAS_Loan_Notify {
 			<th scope="row"><?php esc_html_e( 'Test the request email', 'sharing-club' ); ?></th>
 			<td>
 				<a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=' . self::TEST_ACTION ), self::TEST_ACTION ) ); ?>"><?php esc_html_e( 'Send test email', 'sharing-club' ); ?></a>
-				<p class="description"><?php esc_html_e( 'Sends a sample request, using your own account as the member, to the Loan Manager email. Save your changes first.', 'sharing-club' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Sends a sample request, using your own account as the member, to the Loan Manager email, plus a sample of the member\'s confirmation if that\'s turned on. Save your changes first.', 'sharing-club' ); ?></p>
 			</td>
 		</tr>
 		<tr>
@@ -562,6 +717,9 @@ class TAAS_Loan_Notify {
 		} else {
 			unset( $options['manager_email'] );
 		}
+
+		// Stored as 'off' when unticked, so it's on until someone turns it off.
+		$options['member_email'] = empty( $options['member_email'] ) ? 'off' : 'on';
 
 		$from = sanitize_email( trim( (string) ( $options['from_email'] ?? '' ) ) );
 		if ( is_email( $from ) ) {
@@ -622,7 +780,12 @@ class TAAS_Loan_Notify {
 		if ( ! $items ) {
 			return 'noitems';
 		}
-		return self::send( $items[0], $user, self::manager_emails(), true ) ? 'sent' : 'failed';
+		$sent = self::send( $items[0], $user, self::manager_emails(), true );
+		if ( $sent && self::confirm_members() ) {
+			// A sample of what the member gets, also to the Loan Manager.
+			self::send_confirmation( $items[0], $user, self::manager_emails(), true );
+		}
+		return $sent ? 'sent' : 'failed';
 	}
 
 	/**
@@ -699,7 +862,7 @@ class TAAS_Loan_Notify {
 		$result = self::send_test( $user );
 		if ( 'sent' === $result ) {
 			/* translators: 1: recipient address(es), 2: sender address. */
-			$message = sprintf( __( 'Test email sent to %1$s from %2$s. If it doesn\'t arrive in a few minutes, check the spam folder. If it\'s not there either, the web host isn\'t delivering the site\'s email and an SMTP plugin is needed.', 'sharing-club' ), $to, self::from_email() );
+			$message = sprintf( __( 'Test email(s) sent to %1$s from %2$s. If nothing arrives in a few minutes, check the spam folder. If it\'s not there either, the web host isn\'t delivering the site\'s email and an SMTP plugin is needed.', 'sharing-club' ), $to, self::from_email() );
 		} elseif ( 'failed' === $result ) {
 			/* translators: %s: error message from the mail system. */
 			$message = sprintf( __( 'The email could not be sent. The mail system said: %s', 'sharing-club' ), self::$last_error ? self::$last_error : __( 'no reason given', 'sharing-club' ) );
@@ -741,7 +904,7 @@ class TAAS_Loan_Notify {
 		}
 		$messages = array(
 			/* translators: %s: email address(es). */
-			'sent'    => array( 'success', sprintf( __( 'Test email sent to %s.', 'sharing-club' ), implode( ', ', self::manager_emails() ) ) ),
+			'sent'    => array( 'success', sprintf( __( 'Test email(s) sent to %s.', 'sharing-club' ), implode( ', ', self::manager_emails() ) ) ),
 			'failed'  => array( 'error', __( 'The test email could not be sent. Check that this site can send email (an SMTP plugin may be needed).', 'sharing-club' ) ),
 			'noitems' => array( 'warning', __( 'Add at least one item before sending a test email.', 'sharing-club' ) ),
 			'newlink' => array( 'success', __( 'Made a new private test link. The old one no longer works.', 'sharing-club' ) ),

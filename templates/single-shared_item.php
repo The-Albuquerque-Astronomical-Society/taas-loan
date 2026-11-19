@@ -104,11 +104,11 @@ $taas_reviews  = ! scwp_get_option( 'hide_comments' );
 
 					<?php elseif ( $taas_is_mine && 'requested' === $taas_status ) : ?>
 
-						<p class="taas-loan-note"><?php esc_html_e( 'You have requested this item. The Loan Program Manager will be in touch to arrange pickup.', 'sharing-club' ); ?></p>
+						<p class="taas-loan-note"><?php esc_html_e( 'You have requested this item. The Loan Director will be in touch to arrange pickup.', 'sharing-club' ); ?></p>
 
 					<?php elseif ( $taas_is_mine && 'out' === $taas_status ) : ?>
 
-						<p class="taas-loan-note"><?php esc_html_e( 'You have this item. Contact the Loan Program Manager to arrange a return.', 'sharing-club' ); ?></p>
+						<p class="taas-loan-note"><?php esc_html_e( 'You have this item. Contact the Loan Director to arrange a return.', 'sharing-club' ); ?></p>
 
 					<?php elseif ( 'in' !== $taas_status ) : ?>
 
