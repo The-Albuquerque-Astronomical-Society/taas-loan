@@ -140,7 +140,7 @@ On the command line: `wp taas-loan reset` (add `--keep-pictures` to keep the pic
 ## Handling loans
 
 1. A logged-in member clicks the request button on an item. The Loan Manager gets an email with the item, the member's name, email, mobile and home phone, and an **Open the Loan Portal** button, and the item shows as **requested**. Phone numbers come from the member's Participants Database record with the same email as their WordPress account. Replying to the email goes straight to the member. The member also gets a confirmation email saying the Loan Director will be in touch.
-2. When the member picks it up, open **TAAS Loan Program > Lendings**, edit the request, and fill in the lending date and return date.
+2. When the member picks it up, open **TAAS Loan Program > Check out** (or click **Check it out to them** in the request email). Pick the item and the member, set the return date, and click **Check out**. The loan team (the Loan Manager email) and the member each get an email with the return date. Members who didn't request online can be checked out the same way.
 3. When it comes back, tick it in the list and choose **Mark as returned**. Edit it to add a note if anything's wrong (e.g. "missing lens cap"). The item shows as **available** again.
 
 > **Note:** dates currently use the `dd/mm/yyyy` format (day first).

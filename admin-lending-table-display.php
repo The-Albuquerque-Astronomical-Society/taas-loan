@@ -30,7 +30,7 @@ if(!class_exists('Lending_Table')){
     <div class="wrap">
         
         <div id="icon-users" class="icon32"><br/></div>
-        <h2><?php __('Lendings', 'sharing-club'); ?> <a class="add-new-h2" href="<?php echo get_admin_url(get_current_blog_id(), 'admin.php?page=display_lending_form&post_type=shared_item');?>"><?php _e('Add new lending', 'sharing-club')?></a></h2>
+        <h2><?php __('Lendings', 'sharing-club'); ?> <a class="add-new-h2" href="<?php echo get_admin_url(get_current_blog_id(), 'admin.php?page=display_lending_form&post_type=shared_item');?>"><?php _e('Add new lending', 'sharing-club')?></a> <a class="add-new-h2" href="<?php echo esc_url( TAAS_Loan_Checkout::page_url() ); ?>"><?php esc_html_e( 'Check out an item', 'sharing-club' ); ?></a></h2>
         <?php
             $message = '';
             if ('delete' === $testListTable->current_action()) {
