@@ -126,6 +126,7 @@ Found under **Settings > TAAS Loan Program**:
 | Login page | Where the **Log in to request** button goes | Leave empty: it finds the `/login/` page |
 | Loan Manager email | Who gets the email when a member requests an item. Separate several with commas | The Loan Program Manager's address. Empty uses the site admin email |
 | Mobile / Home phone field | Which [Participants Database](https://xnau.com/work/wordpress-plugins/participants-database/) fields go in the request email | Leave on **Automatic** if it shows the right fields |
+| Confirm requests to members | Emails the member that their request arrived and the Loan Director will be in touch. Replying reaches the Loan Director | **On** |
 | Send emails from | The address request emails come from (shown as "TAAS Loan Program") | Leave empty for `noreply@` this site's domain |
 | Send test email | Sends a sample request (with you as the member) to the Loan Manager email | Try it after saving |
 | Private test link | A link that sends a test email without logging in. Anyone with it can send one (at most once a minute), so keep it private. **Make a new link** turns off the old one | Bookmark it |
@@ -138,7 +139,7 @@ On the command line: `wp taas-loan reset` (add `--keep-pictures` to keep the pic
 
 ## Handling loans
 
-1. A logged-in member clicks the request button on an item. The Loan Manager gets an email with the item, the member's name, email, mobile and home phone, and an **Open the Loan Portal** button, and the item shows as **requested**. Phone numbers come from the member's Participants Database record with the same email as their WordPress account. Replying to the email goes straight to the member.
+1. A logged-in member clicks the request button on an item. The Loan Manager gets an email with the item, the member's name, email, mobile and home phone, and an **Open the Loan Portal** button, and the item shows as **requested**. Phone numbers come from the member's Participants Database record with the same email as their WordPress account. Replying to the email goes straight to the member. The member also gets a confirmation email saying the Loan Director will be in touch.
 2. When the member picks it up, open **TAAS Loan Program > Lendings**, edit the request, and fill in the lending date and return date.
 3. When it comes back, tick it in the list and choose **Mark as returned**. Edit it to add a note if anything's wrong (e.g. "missing lens cap"). The item shows as **available** again.
 
