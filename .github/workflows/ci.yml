@@ -52,7 +52,7 @@ jobs:
       - name: PHPCS on rewritten files (must pass)
         run: >-
           vendor/bin/phpcs -q --report=checkstyle
-          vri-import.php shortcodes.php reset-data.php loan-notify.php loan-checkout.php templates/single-shared_item.php
+          vri-import.php shortcodes.php reset-data.php loan-notify.php loan-checkout.php loan-availability.php templates/single-shared_item.php
           | cs2pr
       - name: Run PHPCS
         if: always()
