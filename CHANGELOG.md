@@ -25,6 +25,10 @@ All notable changes to this project are listed here.
 - Members now get a confirmation email when they request an item: their request arrived, and the Loan Director will be in touch to arrange pickup. Replying reaches the Loan Director. Turn it off with **Confirm requests to members** in settings. Test emails also send a sample of it.
 - Item pages now say "Loan Director" instead of "Loan Program Manager".
 - New **TAAS Loan Program > Check out** page: the Loan Director picks an item and a member, sets the checkout and return dates, and the loan team and the member each get a professional email with the return date. Requested items are listed first and pick their requester automatically. Request emails have a **Check it out to them** button that opens this page ready to go.
+- Lending form (Lendings > Edit) no longer has Reviews or Rating. It has a **Pickup date**, a **Return date** that fills in 30 days later, and a **Status**: Checked Out, Returned, or Damaged needs repair. The Check out page has the same Status and 30-day return date.
+- The **Availability** column on the Lendings page now shows that Status. New bulk action **Mark as damaged needs repair**.
+- Damaged items show **Being repaired** on the website and can't be requested or checked out until marked Returned.
+- The admin menu now has a telescope icon, and **Import** is at the bottom of the menu.
 
 ## [1.3.1] - 2022-12-02
 

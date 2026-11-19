@@ -110,6 +110,10 @@ $taas_reviews  = ! scwp_get_option( 'hide_comments' );
 
 						<p class="taas-loan-note"><?php esc_html_e( 'You have this item. Contact the Loan Director to arrange a return.', 'sharing-club' ); ?></p>
 
+					<?php elseif ( 'repair' === $taas_status ) : ?>
+
+						<p class="taas-loan-note"><?php esc_html_e( 'This item is being repaired and can\'t be borrowed right now.', 'sharing-club' ); ?></p>
+
 					<?php elseif ( 'in' !== $taas_status ) : ?>
 
 						<p class="taas-loan-note"><?php esc_html_e( 'This item is currently on loan to another member.', 'sharing-club' ); ?></p>

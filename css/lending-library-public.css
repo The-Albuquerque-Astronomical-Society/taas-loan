@@ -209,6 +209,9 @@ article .entry-header.entry-header{
 .taas-loan-requested .taas-loan-status {
     background: #9a6700;
 }
+.taas-loan-repair .taas-loan-status {
+    background: #5f6368;
+}
 
 /* ==========================================================================
    Loan program pages: category cards, category list, item page
@@ -221,6 +224,7 @@ article .entry-header.entry-header{
     --taas-loan-in: #2e7d32;
     --taas-loan-out: #b3261e;
     --taas-loan-requested: #9a6700;
+    --taas-loan-repair: #5f6368;
 }
 .taas-loan-page {
     max-width: 1080px;
@@ -277,6 +281,9 @@ article .entry-header.entry-header{
 }
 .taas-loan-badge-requested {
     background: var(--taas-loan-requested);
+}
+.taas-loan-badge-repair {
+    background: var(--taas-loan-repair);
 }
 .taas-loan-back {
     margin: 0 0 1.25em;
