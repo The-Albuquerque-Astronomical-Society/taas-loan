@@ -29,6 +29,7 @@ All notable changes to this project are listed here.
 - The **Availability** column on the Lendings page now shows that Status. New bulk action **Mark as damaged needs repair**.
 - Damaged items show **Being repaired** on the website and can't be requested or checked out until marked Returned.
 - The admin menu now has a telescope icon, and **Import** is at the bottom of the menu.
+- **All objects** has an **Availability** dropdown on each unit (Checked Out, Returned, Damaged needs repair) that saves as soon as it changes. Picking Checked Out opens a small box right there to pick the member and the pickup and return dates (with a calendar, return set 30 days out); saving it adds the loan to Lendings and emails the member and the loan team, just like the Check out page.
 
 ## [1.3.1] - 2022-12-02
 

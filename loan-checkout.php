@@ -79,7 +79,7 @@ class TAAS_Loan_Checkout {
 	}
 
 	/**
-	 * Save a checkout, email everyone, and go back to the form.
+	 * Save a checkout from the form, email everyone, and go back to the form.
 	 */
 	public static function handle() {
 		if ( ! current_user_can( 'manage_options' ) ) {
@@ -89,14 +89,47 @@ class TAAS_Loan_Checkout {
 
 		$item_id = isset( $_POST['item'] ) ? absint( $_POST['item'] ) : 0;
 		$user_id = isset( $_POST['member'] ) ? absint( $_POST['member'] ) : 0;
-		$lent    = self::parse_date( isset( $_POST['lent'] ) ? sanitize_text_field( wp_unslash( $_POST['lent'] ) ) : '' );
-		$due     = self::parse_date( isset( $_POST['due'] ) ? sanitize_text_field( wp_unslash( $_POST['due'] ) ) : '' );
-		$notes   = isset( $_POST['notes'] ) ? sanitize_text_field( wp_unslash( $_POST['notes'] ) ) : '';
-		$state   = isset( $_POST['state'] ) ? sanitize_key( $_POST['state'] ) : 'out';
-		$notify  = ! empty( $_POST['notify'] );
+		$state   = isset( $_POST['state'] ) ? sanitize_key( wp_unslash( $_POST['state'] ) ) : 'out';
+		$result  = self::save(
+			$item_id,
+			$user_id,
+			isset( $_POST['lent'] ) ? sanitize_text_field( wp_unslash( $_POST['lent'] ) ) : '',
+			isset( $_POST['due'] ) ? sanitize_text_field( wp_unslash( $_POST['due'] ) ) : '',
+			isset( $_POST['notes'] ) ? sanitize_text_field( wp_unslash( $_POST['notes'] ) ) : '',
+			$state,
+			! empty( $_POST['notify'] )
+		);
+		if ( isset( $result['error'] ) ) {
+			self::back( $result + self::picked( $item_id, $user_id ) );
+		}
+		self::back(
+			$result + array(
+				'done'  => $item_id,
+				'who'   => $user_id,
+				'state' => $state,
+			)
+		);
+	}
 
+	/**
+	 * Record a checkout and, if asked, email the member and the loan team.
+	 *
+	 * Used by the Check out page and the Availability dropdown on All objects.
+	 *
+	 * @param int    $item_id Item.
+	 * @param int    $user_id Member.
+	 * @param string $lent    Pickup date, YYYY-MM-DD.
+	 * @param string $due     Return date, YYYY-MM-DD.
+	 * @param string $notes   Notes for the loan team ('' to leave as is).
+	 * @param string $state   Key from TAAS_Loan_Shortcodes::states().
+	 * @param bool   $notify  Send the emails.
+	 * @return array{error?:string,sent_team?:int,sent_member?:int}
+	 */
+	public static function save( $item_id, $user_id, $lent, $due, $notes, $state, $notify ) {
 		$post = get_post( $item_id );
 		$user = get_userdata( $user_id );
+		$lent = self::parse_date( $lent );
+		$due  = self::parse_date( $due );
 
 		$error = '';
 		if ( ! $post || 'shared_item' !== $post->post_type ) {
@@ -113,7 +146,7 @@ class TAAS_Loan_Checkout {
 			$error = 'out';
 		}
 		if ( $error ) {
-			self::back( array( 'error' => $error ) + self::picked( $item_id, $user_id ) );
+			return array( 'error' => $error );
 		}
 
 		global $wpdb;
@@ -156,22 +189,62 @@ class TAAS_Loan_Checkout {
 			);
 		}
 		if ( ! $saved ) {
-			self::back( array( 'error' => 'save' ) + self::picked( $item_id, $user_id ) );
+			return array( 'error' => 'save' );
 		}
 		TAAS_Loan_Shortcodes::set_state( $request_id ? $request_id : (int) $wpdb->insert_id, $state );
 
-		$result = array(
-			'done'  => $item_id,
-			'who'   => $user_id,
-			'state' => $state,
-		);
+		$result = array();
 		// The checkout email only makes sense when the member is taking the item.
 		if ( $notify && 'out' === $state ) {
-			$sent             = TAAS_Loan_Notify::send_checkout( $post, $user, $lent->getTimestamp(), $due->getTimestamp() );
+			$sent                  = TAAS_Loan_Notify::send_checkout( $post, $user, $lent->getTimestamp(), $due->getTimestamp() );
 			$result['sent_team']   = $sent['team'] ? 1 : 0;
 			$result['sent_member'] = $sent['member'] ? 1 : 0;
 		}
-		self::back( $result );
+		return $result;
+	}
+
+	/**
+	 * Message for an error code from save().
+	 *
+	 * @param string $error Error code.
+	 * @return string
+	 */
+	public static function error_message( $error ) {
+		$messages = array(
+			'item'   => __( 'Pick an item.', 'sharing-club' ),
+			'member' => __( 'Pick a member.', 'sharing-club' ),
+			'dates'  => __( 'Enter both a pickup date and a return date.', 'sharing-club' ),
+			'order'  => __( 'The return date can\'t be before the pickup date.', 'sharing-club' ),
+			'state'  => __( 'Pick a status.', 'sharing-club' ),
+			'out'    => __( 'That item is checked out or needs repair. Mark it as returned on the Lendings page first.', 'sharing-club' ),
+			'save'   => __( 'The checkout could not be saved. Please try again.', 'sharing-club' ),
+		);
+		return isset( $messages[ $error ] ) ? $messages[ $error ] : __( 'Something went wrong.', 'sharing-club' );
+	}
+
+	/**
+	 * What happened to the emails, as a sentence ('' if none were asked for).
+	 *
+	 * @param int|null $team   1 if the loan team's email was sent, 0 if not, null if not asked.
+	 * @param int|null $member Same for the member's email.
+	 * @return string
+	 */
+	public static function email_message( $team, $member ) {
+		if ( null === $team ) {
+			return __( 'No emails were sent.', 'sharing-club' );
+		}
+		if ( $team && $member ) {
+			return __( 'Emails sent to the loan team and the member.', 'sharing-club' );
+		}
+		$missed = array();
+		if ( ! $team ) {
+			$missed[] = __( 'the loan team', 'sharing-club' );
+		}
+		if ( ! $member ) {
+			$missed[] = __( 'the member', 'sharing-club' );
+		}
+		/* translators: %s: who didn't get the email, e.g. "the member". */
+		return sprintf( __( 'The email to %s could not be sent.', 'sharing-club' ), implode( ' / ', $missed ) );
 	}
 
 	/**
@@ -212,16 +285,7 @@ class TAAS_Loan_Checkout {
 		// phpcs:enable
 
 		if ( $error ) {
-			$messages = array(
-				'item'   => __( 'Pick an item.', 'sharing-club' ),
-				'member' => __( 'Pick a member.', 'sharing-club' ),
-				'dates'  => __( 'Enter both a pickup date and a return date.', 'sharing-club' ),
-				'order'  => __( 'The return date can\'t be before the pickup date.', 'sharing-club' ),
-				'state'  => __( 'Pick a status.', 'sharing-club' ),
-				'out'    => __( 'That item is checked out or needs repair. Mark it as returned on the Lendings page first.', 'sharing-club' ),
-				'save'   => __( 'The checkout could not be saved. Please try again.', 'sharing-club' ),
-			);
-			$text     = isset( $messages[ $error ] ) ? $messages[ $error ] : __( 'Something went wrong.', 'sharing-club' );
+			$text = self::error_message( $error );
 			printf( '<div class="notice notice-error"><p>%s</p></div>', esc_html( $text ) );
 			return;
 		}
@@ -247,23 +311,8 @@ class TAAS_Loan_Checkout {
 				$states[ $state ]
 			);
 		}
-		$type = 'success';
-		if ( null === $team ) {
-			$text .= ' ' . __( 'No emails were sent.', 'sharing-club' );
-		} elseif ( $team && $memb ) {
-			$text .= ' ' . __( 'Emails sent to the loan team and the member.', 'sharing-club' );
-		} else {
-			$type   = 'warning';
-			$missed = array();
-			if ( ! $team ) {
-				$missed[] = __( 'the loan team', 'sharing-club' );
-			}
-			if ( ! $memb ) {
-				$missed[] = __( 'the member', 'sharing-club' );
-			}
-			/* translators: %s: who didn't get the email, e.g. "the member". */
-			$text .= ' ' . sprintf( __( 'The email to %s could not be sent.', 'sharing-club' ), implode( ' / ', $missed ) );
-		}
+		$type  = ( null === $team || ( $team && $memb ) ) ? 'success' : 'warning';
+		$text .= ' ' . self::email_message( $team, $memb );
 		printf( '<div class="notice notice-%1$s is-dismissible"><p>%2$s</p></div>', esc_attr( $type ), esc_html( $text ) );
 	}
 

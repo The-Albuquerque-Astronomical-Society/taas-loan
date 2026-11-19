@@ -104,14 +104,14 @@ class TAAS_Loan_Shortcodes {
 	/**
 	 * Latest loan for every item, in one query.
 	 *
-	 * @return array<int,array{status:string,user_id:int}> Post ID => status ('in', 'out', 'requested' or 'repair') and borrower.
+	 * @return array<int,array{status:string,user_id:int,id:int}> Post ID => status ('in', 'out', 'requested' or 'repair'), borrower and lending ID.
 	 */
 	public static function loans() {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT c.comment_post_ID AS post_id, c.user_id, c.comment_date AS lent, c.comment_date_gmt AS due, m.meta_value AS state
+				"SELECT c.comment_ID AS id, c.comment_post_ID AS post_id, c.user_id, c.comment_date AS lent, c.comment_date_gmt AS due, m.meta_value AS state
 				FROM {$wpdb->comments} c
 				INNER JOIN (
 					SELECT comment_post_ID, MAX(comment_ID) AS last_id
@@ -137,6 +137,7 @@ class TAAS_Loan_Shortcodes {
 			$out[ (int) $row['post_id'] ] = array(
 				'status'  => $map[ $state ],
 				'user_id' => (int) $row['user_id'],
+				'id'      => (int) $row['id'],
 			);
 		}
 		return $out;
