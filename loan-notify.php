@@ -135,6 +135,170 @@ class TAAS_Loan_Notify {
 	}
 
 	/**
+	 * Tell the loan team and the member that an item was checked out.
+	 *
+	 * @param WP_Post $post Item.
+	 * @param WP_User $user Member who has it.
+	 * @param int     $lent Checkout date (timestamp).
+	 * @param int     $due  Return date (timestamp).
+	 * @return array{team:bool,member:bool} Whether each email was handed off.
+	 */
+	public static function send_checkout( $post, $user, $lent, $due ) {
+		$member  = self::member_contact( $user );
+		$item    = wp_specialchars_decode( get_the_title( $post ), ENT_QUOTES );
+		$format  = get_option( 'date_format' );
+		$details = array(
+			__( 'Checked out', 'sharing-club' ) => wp_date( $format, $lent ),
+			__( 'Return by', 'sharing-club' )   => wp_date( $format, $due ),
+		);
+
+		// To the loan team; replying reaches the member.
+		/* translators: 1: item name, 2: member name, 3: return date. */
+		$subject = sprintf( __( 'Checked out: %1$s to %2$s, due %3$s', 'sharing-club' ), $item, $member['name'], $details[ __( 'Return by', 'sharing-club' ) ] );
+		$reply   = is_email( $member['email'] ) ? self::header_safe( $member['name'] ) . ' <' . $member['email'] . '>' : '';
+		$team    = self::deliver( self::manager_emails(), $subject, self::checkout_team_html( $post, $member, $details ), self::checkout_text( $post, $member, $details, true ), $reply );
+
+		// To the member; replying reaches the loan team.
+		$sent_member = false;
+		if ( is_email( $member['email'] ) ) {
+			/* translators: 1: item name, 2: return date. */
+			$subject     = sprintf( __( 'You\'ve checked out %1$s (return by %2$s)', 'sharing-club' ), $item, $details[ __( 'Return by', 'sharing-club' ) ] );
+			$sent_member = self::deliver( array( $member['email'] ), $subject, self::checkout_member_html( $post, $member, $details ), self::checkout_text( $post, $member, $details, false ), implode( ', ', self::manager_emails() ) );
+		}
+
+		return array(
+			'team'   => $team,
+			'member' => $sent_member,
+		);
+	}
+
+	/**
+	 * Checkout email for the loan team.
+	 *
+	 * @param WP_Post              $post    Item.
+	 * @param array                $member  From member_contact().
+	 * @param array<string,string> $details Checkout and return dates.
+	 * @return string HTML.
+	 */
+	private static function checkout_team_html( $post, array $member, array $details ) {
+		ob_start();
+		?>
+	<tr><td style="padding:28px 28px 8px;">
+		<h1 style="margin:0 0 8px;font-size:22px;color:#111827;"><?php esc_html_e( 'Item checked out', 'sharing-club' ); ?></h1>
+		<p style="margin:0;color:#374151;font-size:15px;line-height:1.5;">
+			<?php
+			/* translators: 1: item name, 2: member name. */
+			echo wp_kses_post( sprintf( __( '%1$s has been checked out to %2$s.', 'sharing-club' ), '<strong>' . esc_html( get_the_title( $post ) ) . '</strong>', '<strong>' . esc_html( $member['name'] ) . '</strong>' ) );
+			?>
+		</p>
+	</td></tr>
+	<tr><td style="padding:16px 28px 0;">
+		<?php echo self::item_card_html( $post, $details ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside. ?>
+	</td></tr>
+	<tr><td style="padding:16px 28px 0;">
+		<?php echo self::member_card_html( $member ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside. ?>
+	</td></tr>
+	<tr><td align="center" style="padding:24px 28px;">
+		<?php echo self::button_html( self::portal_url(), __( 'Open the Loan Portal', 'sharing-club' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside. ?>
+	</td></tr>
+	<tr><td style="padding:16px 28px 24px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:13px;line-height:1.5;">
+		<?php
+		/* translators: %s: member's first name. */
+		echo esc_html( sprintf( __( 'Reply to this email to contact %s directly.', 'sharing-club' ), strtok( $member['name'], ' ' ) ) );
+		?>
+	</td></tr>
+		<?php
+		return self::email_shell( (string) ob_get_clean() );
+	}
+
+	/**
+	 * Checkout email for the member.
+	 *
+	 * @param WP_Post              $post    Item.
+	 * @param array                $member  From member_contact().
+	 * @param array<string,string> $details Checkout and return dates.
+	 * @return string HTML.
+	 */
+	private static function checkout_member_html( $post, array $member, array $details ) {
+		$due = $details[ __( 'Return by', 'sharing-club' ) ];
+		ob_start();
+		?>
+	<tr><td style="padding:28px 28px 8px;">
+		<h1 style="margin:0 0 8px;font-size:22px;color:#111827;"><?php esc_html_e( 'Your equipment is checked out', 'sharing-club' ); ?></h1>
+		<p style="margin:0 0 12px;color:#374151;font-size:15px;line-height:1.5;">
+			<?php
+			/* translators: %s: member's first name. */
+			echo esc_html( sprintf( __( 'Hi %s,', 'sharing-club' ), strtok( $member['name'], ' ' ) ) );
+			?>
+		</p>
+		<p style="margin:0;color:#374151;font-size:15px;line-height:1.5;">
+			<?php
+			/* translators: 1: item name, 2: return date. */
+			echo wp_kses_post( sprintf( __( 'You\'ve checked out %1$s from the TAAS Loan Program. Please return it by %2$s.', 'sharing-club' ), '<strong>' . esc_html( get_the_title( $post ) ) . '</strong>', '<strong>' . esc_html( $due ) . '</strong>' ) );
+			?>
+		</p>
+	</td></tr>
+	<tr><td style="padding:16px 28px 0;">
+		<?php echo self::item_card_html( $post, $details ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside. ?>
+	</td></tr>
+	<tr><td style="padding:20px 28px 0;color:#374151;font-size:15px;line-height:1.5;">
+		<?php esc_html_e( 'Need more time, or have a question about the equipment? Just reply to this email to reach the Loan Director.', 'sharing-club' ); ?>
+	</td></tr>
+	<tr><td align="center" style="padding:24px 28px;">
+		<?php echo self::button_html( get_permalink( $post ), __( 'View the item', 'sharing-club' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside. ?>
+	</td></tr>
+	<tr><td style="padding:16px 28px 24px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:13px;line-height:1.5;">
+		<?php esc_html_e( 'Enjoy, and clear skies!', 'sharing-club' ); ?>
+	</td></tr>
+		<?php
+		return self::email_shell( (string) ob_get_clean() );
+	}
+
+	/**
+	 * Checkout email as plain text.
+	 *
+	 * @param WP_Post              $post    Item.
+	 * @param array                $member  From member_contact().
+	 * @param array<string,string> $details Checkout and return dates.
+	 * @param bool                 $team    For the loan team (else the member).
+	 * @return string
+	 */
+	private static function checkout_text( $post, array $member, array $details, $team ) {
+		$item  = wp_specialchars_decode( get_the_title( $post ), ENT_QUOTES );
+		$lines = array();
+		if ( $team ) {
+			/* translators: 1: item name, 2: member name. */
+			$lines[] = sprintf( __( '%1$s has been checked out to %2$s.', 'sharing-club' ), $item, $member['name'] );
+		} else {
+			/* translators: %s: member's first name. */
+			$lines[] = sprintf( __( 'Hi %s,', 'sharing-club' ), strtok( $member['name'], ' ' ) );
+			$lines[] = '';
+			/* translators: 1: item name, 2: return date. */
+			$lines[] = sprintf( __( 'You\'ve checked out %1$s from the TAAS Loan Program. Please return it by %2$s.', 'sharing-club' ), $item, $details[ __( 'Return by', 'sharing-club' ) ] );
+		}
+		$lines[] = '';
+		foreach ( $details as $label => $value ) {
+			$lines[] = $label . ': ' . $value;
+		}
+		$lines[] = __( 'Item', 'sharing-club' ) . ': ' . get_permalink( $post );
+		$lines[] = '';
+		if ( $team ) {
+			$none    = __( 'Not on file', 'sharing-club' );
+			$lines[] = __( 'Name', 'sharing-club' ) . ': ' . $member['name'];
+			$lines[] = __( 'Email', 'sharing-club' ) . ': ' . $member['email'];
+			$lines[] = __( 'Mobile', 'sharing-club' ) . ': ' . ( '' !== $member['mobile'] ? $member['mobile'] : $none );
+			$lines[] = __( 'Home', 'sharing-club' ) . ': ' . ( '' !== $member['home'] ? $member['home'] : $none );
+			$lines[] = '';
+			$lines[] = __( 'Open the Loan Portal', 'sharing-club' ) . ': ' . self::portal_url();
+		} else {
+			$lines[] = __( 'Need more time, or have a question about the equipment? Just reply to this email to reach the Loan Director.', 'sharing-club' );
+			$lines[] = '';
+			$lines[] = __( 'Enjoy, and clear skies!', 'sharing-club' );
+		}
+		return implode( "\n", $lines ) . "\n";
+	}
+
+	/**
 	 * Send an email with a TAAS Loan Program sender and a plain-text copy.
 	 *
 	 * @param string[] $to       Recipients.
@@ -287,7 +451,7 @@ class TAAS_Loan_Notify {
 	 * email, otherwise their WordPress profile.
 	 *
 	 * @param WP_User $user Member.
-	 * @return array{name:string,email:string,mobile:string,home:string,username:string,found:bool}
+	 * @return array{name:string,email:string,mobile:string,home:string,username:string,user_id:int,found:bool}
 	 */
 	public static function member_contact( $user ) {
 		$record = self::pdb_record( $user->user_email );
@@ -310,6 +474,7 @@ class TAAS_Loan_Notify {
 			'mobile'   => $record && $fields['mobile'] ? trim( (string) ( $record[ $fields['mobile'] ] ?? '' ) ) : '',
 			'home'     => $record && $fields['home'] ? trim( (string) ( $record[ $fields['home'] ] ?? '' ) ) : '',
 			'username' => $user->user_login,
+			'user_id'  => (int) $user->ID,
 			'found'    => (bool) $record,
 		);
 	}
@@ -420,30 +585,8 @@ class TAAS_Loan_Notify {
 	 * @return string HTML.
 	 */
 	private static function email_html( $post, array $member ) {
-		$item    = get_the_title( $post );
-		$first   = strtok( $member['name'], ' ' );
-		$missing = '<span style="color:#8a8f98;">' . esc_html__( 'Not on file', 'sharing-club' ) . '</span>';
-
-		$rows = array(
-			__( 'Name', 'sharing-club' )     => esc_html( $member['name'] ),
-			__( 'Email', 'sharing-club' )    => '<a href="' . esc_url( 'mailto:' . $member['email'] ) . '" style="color:#1d4ed8;text-decoration:none;">' . esc_html( $member['email'] ) . '</a>',
-			__( 'Mobile', 'sharing-club' )   => self::phone_html( $member['mobile'], $missing ),
-			__( 'Home', 'sharing-club' )     => self::phone_html( $member['home'], $missing ),
-			__( 'Username', 'sharing-club' ) => esc_html( $member['username'] ),
-		);
-
-		$member_rows = '';
-		foreach ( $rows as $label => $value ) {
-			$member_rows .= '<tr><td style="padding:6px 0;width:110px;color:#5b6270;font-size:14px;vertical-align:top;">' . esc_html( $label ) . '</td>'
-				. '<td style="padding:6px 0;color:#111827;font-size:15px;">' . $value . '</td></tr>';
-		}
-
-		$note = '';
-		if ( ! $member['found'] ) {
-			$note = '<p style="margin:12px 0 0;color:#8a5a00;font-size:13px;">'
-				. esc_html__( 'No Participants Database record matches this member\'s email, so phone numbers are missing.', 'sharing-club' )
-				. '</p>';
-		}
+		$item  = get_the_title( $post );
+		$first = strtok( $member['name'], ' ' );
 
 		ob_start();
 		?>
@@ -460,16 +603,13 @@ class TAAS_Loan_Notify {
 		<?php echo self::item_card_html( $post ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside. ?>
 	</td></tr>
 	<tr><td style="padding:16px 28px 0;">
-		<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:6px;">
-			<tr><td style="padding:16px 20px;">
-				<div style="color:#5b6270;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;"><?php esc_html_e( 'Member', 'sharing-club' ); ?></div>
-				<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><?php echo $member_rows; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped parts above. ?></table>
-				<?php echo $note; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>
-			</td></tr>
-		</table>
+		<?php echo self::member_card_html( $member ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside. ?>
 	</td></tr>
-	<tr><td align="center" style="padding:28px;">
-		<a href="<?php echo esc_url( self::portal_url() ); ?>" style="display:inline-block;background:#1d4ed8;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 26px;border-radius:6px;"><?php esc_html_e( 'Open the Loan Portal', 'sharing-club' ); ?></a>
+	<tr><td align="center" style="padding:24px 28px;">
+		<?php
+		$check_out = TAAS_Loan_Checkout::page_url( $post->ID, $member['user_id'] );
+		echo self::button_html( $check_out, __( 'Check it out to them', 'sharing-club' ) ) . self::button_html( self::portal_url(), __( 'Open the Loan Portal', 'sharing-club' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside.
+		?>
 	</td></tr>
 	<tr><td style="padding:16px 28px 24px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:13px;line-height:1.5;">
 		<?php
@@ -512,19 +652,77 @@ class TAAS_Loan_Notify {
 	}
 
 	/**
-	 * Item card for emails: name (linked), category and when it was requested.
+	 * Item card for emails: name (linked), category, and either when it was
+	 * requested or the given details (like checkout and return dates).
 	 *
-	 * @param WP_Post $post Item.
+	 * @param WP_Post              $post    Item.
+	 * @param array<string,string> $details Label => value (plain text). Empty shows the time now.
 	 * @return string HTML.
 	 */
-	private static function item_card_html( $post ) {
+	private static function item_card_html( $post, array $details = array() ) {
 		$category = TAAS_Loan_Shortcodes::primary_category( $post->ID );
-		$meta     = ( $category ? $category->name . ' · ' : '' ) . wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) );
-		return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;"><tr><td style="padding:16px 20px;">'
+		$meta     = $category ? $category->name : '';
+		if ( ! $details ) {
+			$meta .= ( $meta ? ' · ' : '' ) . wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) );
+		}
+		$html = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;"><tr><td style="padding:16px 20px;">'
 			. '<div style="color:#5b6270;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">' . esc_html__( 'Item', 'sharing-club' ) . '</div>'
-			. '<a href="' . esc_url( get_permalink( $post ) ) . '" style="color:#111827;font-size:16px;font-weight:600;text-decoration:none;">' . esc_html( get_the_title( $post ) ) . '</a>'
-			. '<div style="color:#5b6270;font-size:13px;margin-top:4px;">' . esc_html( $meta ) . '</div>'
-			. '</td></tr></table>';
+			. '<a href="' . esc_url( get_permalink( $post ) ) . '" style="color:#111827;font-size:16px;font-weight:600;text-decoration:none;">' . esc_html( get_the_title( $post ) ) . '</a>';
+		if ( $meta ) {
+			$html .= '<div style="color:#5b6270;font-size:13px;margin-top:4px;">' . esc_html( $meta ) . '</div>';
+		}
+		if ( $details ) {
+			$html .= '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:12px;">';
+			foreach ( $details as $label => $value ) {
+				$html .= '<tr><td style="padding:3px 16px 3px 0;color:#5b6270;font-size:14px;">' . esc_html( $label ) . '</td>'
+					. '<td style="padding:3px 0;color:#111827;font-size:15px;font-weight:600;">' . esc_html( $value ) . '</td></tr>';
+			}
+			$html .= '</table>';
+		}
+		return $html . '</td></tr></table>';
+	}
+
+	/**
+	 * Member card for emails: name, email, phones, username.
+	 *
+	 * @param array $member From member_contact().
+	 * @return string HTML.
+	 */
+	private static function member_card_html( array $member ) {
+		$missing = '<span style="color:#8a8f98;">' . esc_html__( 'Not on file', 'sharing-club' ) . '</span>';
+		$rows    = array(
+			__( 'Name', 'sharing-club' )     => esc_html( $member['name'] ),
+			__( 'Email', 'sharing-club' )    => '<a href="' . esc_url( 'mailto:' . $member['email'] ) . '" style="color:#1d4ed8;text-decoration:none;">' . esc_html( $member['email'] ) . '</a>',
+			__( 'Mobile', 'sharing-club' )   => self::phone_html( $member['mobile'], $missing ),
+			__( 'Home', 'sharing-club' )     => self::phone_html( $member['home'], $missing ),
+			__( 'Username', 'sharing-club' ) => esc_html( $member['username'] ),
+		);
+
+		$html = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:6px;"><tr><td style="padding:16px 20px;">'
+			. '<div style="color:#5b6270;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">' . esc_html__( 'Member', 'sharing-club' ) . '</div>'
+			. '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">';
+		foreach ( $rows as $label => $value ) {
+			$html .= '<tr><td style="padding:6px 0;width:110px;color:#5b6270;font-size:14px;vertical-align:top;">' . esc_html( $label ) . '</td>'
+				. '<td style="padding:6px 0;color:#111827;font-size:15px;">' . $value . '</td></tr>';
+		}
+		$html .= '</table>';
+		if ( ! $member['found'] ) {
+			$html .= '<p style="margin:12px 0 0;color:#8a5a00;font-size:13px;">'
+				. esc_html__( 'No Participants Database record matches this member\'s email, so phone numbers are missing.', 'sharing-club' )
+				. '</p>';
+		}
+		return $html . '</td></tr></table>';
+	}
+
+	/**
+	 * A big blue email button.
+	 *
+	 * @param string $url   Link.
+	 * @param string $label Button text.
+	 * @return string HTML.
+	 */
+	private static function button_html( $url, $label ) {
+		return '<a href="' . esc_url( $url ) . '" style="display:inline-block;background:#1d4ed8;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 26px;border-radius:6px;margin:4px;">' . esc_html( $label ) . '</a>';
 	}
 
 	/**
