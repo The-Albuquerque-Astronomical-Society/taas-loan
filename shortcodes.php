@@ -53,40 +53,89 @@ class TAAS_Loan_Shortcodes {
 	 * Helpers
 	 * ------------------------------------------------------------------ */
 
+	/** Comment meta key holding a lending's status. */
+	const STATE_META = 'taas_loan_status';
+
+	/**
+	 * Lending statuses the Loan Director can pick.
+	 *
+	 * @return array<string,string> Key => label.
+	 */
+	public static function states() {
+		return array(
+			'out'      => __( 'Checked Out', 'sharing-club' ),
+			'returned' => __( 'Returned', 'sharing-club' ),
+			'damaged'  => __( 'Damaged needs repair', 'sharing-club' ),
+		);
+	}
+
+	/**
+	 * Save a lending's status.
+	 *
+	 * @param int    $lending_id Lending (comment) ID.
+	 * @param string $state      Key from states().
+	 */
+	public static function set_state( $lending_id, $state ) {
+		if ( isset( self::states()[ $state ] ) ) {
+			update_comment_meta( (int) $lending_id, self::STATE_META, $state );
+		}
+	}
+
+	/**
+	 * Work out a lending's status from its dates and saved status.
+	 *
+	 * @param string $lent  MySQL lending date.
+	 * @param string $due   MySQL return date.
+	 * @param string $state Saved status ('' for older lendings).
+	 * @return string 'requested', 'out', 'returned' or 'damaged'.
+	 */
+	public static function lending_state( $lent, $due, $state ) {
+		if ( self::is_empty_date( (string) $lent ) ) {
+			return 'requested';
+		}
+		if ( isset( self::states()[ $state ] ) ) {
+			return $state;
+		}
+		// Older lendings with no saved status: go by the return date.
+		$due = (string) $due;
+		return ( self::is_empty_date( $due ) || $due > current_time( 'mysql' ) ) ? 'out' : 'returned';
+	}
+
 	/**
 	 * Latest loan for every item, in one query.
 	 *
-	 * @return array<int,array{status:string,user_id:int}> Post ID => status and borrower.
+	 * @return array<int,array{status:string,user_id:int}> Post ID => status ('in', 'out', 'requested' or 'repair') and borrower.
 	 */
 	public static function loans() {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$rows = $wpdb->get_results(
-			"SELECT c.comment_post_ID AS post_id, c.user_id, c.comment_date AS lent, c.comment_date_gmt AS due
-			FROM {$wpdb->comments} c
-			INNER JOIN (
-				SELECT comment_post_ID, MAX(comment_ID) AS last_id
-				FROM {$wpdb->comments}
-				WHERE comment_type = 'lending'
-				GROUP BY comment_post_ID
-			) latest ON c.comment_ID = latest.last_id",
+			$wpdb->prepare(
+				"SELECT c.comment_post_ID AS post_id, c.user_id, c.comment_date AS lent, c.comment_date_gmt AS due, m.meta_value AS state
+				FROM {$wpdb->comments} c
+				INNER JOIN (
+					SELECT comment_post_ID, MAX(comment_ID) AS last_id
+					FROM {$wpdb->comments}
+					WHERE comment_type = 'lending'
+					GROUP BY comment_post_ID
+				) latest ON c.comment_ID = latest.last_id
+				LEFT JOIN {$wpdb->commentmeta} m ON m.comment_id = c.comment_ID AND m.meta_key = %s",
+				self::STATE_META
+			),
 			ARRAY_A
 		);
 
-		$now = current_time( 'mysql' );
+		$map = array(
+			'requested' => 'requested',
+			'out'       => 'out',
+			'returned'  => 'in',
+			'damaged'   => 'repair',
+		);
 		$out = array();
 		foreach ( (array) $rows as $row ) {
-			$lent = (string) $row['lent'];
-			$due  = (string) $row['due'];
-			if ( self::is_empty_date( $lent ) ) {
-				$status = 'requested';
-			} elseif ( self::is_empty_date( $due ) || $due > $now ) {
-				$status = 'out';
-			} else {
-				$status = 'in';
-			}
+			$state                        = self::lending_state( $row['lent'], $row['due'], (string) $row['state'] );
 			$out[ (int) $row['post_id'] ] = array(
-				'status'  => $status,
+				'status'  => $map[ $state ],
 				'user_id' => (int) $row['user_id'],
 			);
 		}
@@ -96,7 +145,7 @@ class TAAS_Loan_Shortcodes {
 	/**
 	 * Latest loan status for every item.
 	 *
-	 * @return array<int,string> Post ID => 'in', 'out' or 'requested'.
+	 * @return array<int,string> Post ID => 'in', 'out', 'requested' or 'repair'.
 	 */
 	public static function statuses() {
 		return wp_list_pluck( self::loans(), 'status' );
@@ -129,7 +178,7 @@ class TAAS_Loan_Shortcodes {
 	/**
 	 * Label for a status.
 	 *
-	 * @param string $status 'in', 'out' or 'requested'.
+	 * @param string $status 'in', 'out', 'requested' or 'repair'.
 	 * @return string
 	 */
 	public static function status_label( $status ) {
@@ -138,6 +187,8 @@ class TAAS_Loan_Shortcodes {
 				return __( 'Out', 'sharing-club' );
 			case 'requested':
 				return __( 'Requested', 'sharing-club' );
+			case 'repair':
+				return __( 'Being repaired', 'sharing-club' );
 			default:
 				return __( 'In', 'sharing-club' );
 		}
@@ -146,7 +197,7 @@ class TAAS_Loan_Shortcodes {
 	/**
 	 * Status badge HTML.
 	 *
-	 * @param string $status 'in', 'out' or 'requested'.
+	 * @param string $status 'in', 'out', 'requested' or 'repair'.
 	 * @return string
 	 */
 	public static function status_badge( $status ) {

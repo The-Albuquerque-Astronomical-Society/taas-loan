@@ -92,6 +92,7 @@ class TAAS_Loan_Checkout {
 		$lent    = self::parse_date( isset( $_POST['lent'] ) ? sanitize_text_field( wp_unslash( $_POST['lent'] ) ) : '' );
 		$due     = self::parse_date( isset( $_POST['due'] ) ? sanitize_text_field( wp_unslash( $_POST['due'] ) ) : '' );
 		$notes   = isset( $_POST['notes'] ) ? sanitize_text_field( wp_unslash( $_POST['notes'] ) ) : '';
+		$state   = isset( $_POST['state'] ) ? sanitize_key( $_POST['state'] ) : 'out';
 		$notify  = ! empty( $_POST['notify'] );
 
 		$post = get_post( $item_id );
@@ -106,7 +107,9 @@ class TAAS_Loan_Checkout {
 			$error = 'dates';
 		} elseif ( $due < $lent ) {
 			$error = 'order';
-		} elseif ( 'out' === TAAS_Loan_Shortcodes::loan( $item_id )['status'] ) {
+		} elseif ( ! isset( TAAS_Loan_Shortcodes::states()[ $state ] ) ) {
+			$error = 'state';
+		} elseif ( in_array( TAAS_Loan_Shortcodes::loan( $item_id )['status'], array( 'out', 'repair' ), true ) ) {
 			$error = 'out';
 		}
 		if ( $error ) {
@@ -155,12 +158,15 @@ class TAAS_Loan_Checkout {
 		if ( ! $saved ) {
 			self::back( array( 'error' => 'save' ) + self::picked( $item_id, $user_id ) );
 		}
+		TAAS_Loan_Shortcodes::set_state( $request_id ? $request_id : (int) $wpdb->insert_id, $state );
 
 		$result = array(
-			'done' => $item_id,
-			'who'  => $user_id,
+			'done'  => $item_id,
+			'who'   => $user_id,
+			'state' => $state,
 		);
-		if ( $notify ) {
+		// The checkout email only makes sense when the member is taking the item.
+		if ( $notify && 'out' === $state ) {
 			$sent             = TAAS_Loan_Notify::send_checkout( $post, $user, $lent->getTimestamp(), $due->getTimestamp() );
 			$result['sent_team']   = $sent['team'] ? 1 : 0;
 			$result['sent_member'] = $sent['member'] ? 1 : 0;
@@ -202,15 +208,17 @@ class TAAS_Loan_Checkout {
 		$who   = isset( $_GET['who'] ) ? absint( $_GET['who'] ) : 0;
 		$team  = isset( $_GET['sent_team'] ) ? absint( $_GET['sent_team'] ) : null;
 		$memb  = isset( $_GET['sent_member'] ) ? absint( $_GET['sent_member'] ) : null;
+		$state = isset( $_GET['state'] ) ? sanitize_key( wp_unslash( $_GET['state'] ) ) : 'out';
 		// phpcs:enable
 
 		if ( $error ) {
 			$messages = array(
 				'item'   => __( 'Pick an item.', 'sharing-club' ),
 				'member' => __( 'Pick a member.', 'sharing-club' ),
-				'dates'  => __( 'Enter both a checkout date and a return date.', 'sharing-club' ),
-				'order'  => __( 'The return date can\'t be before the checkout date.', 'sharing-club' ),
-				'out'    => __( 'That item is already checked out. Mark it as returned on the Lendings page first.', 'sharing-club' ),
+				'dates'  => __( 'Enter both a pickup date and a return date.', 'sharing-club' ),
+				'order'  => __( 'The return date can\'t be before the pickup date.', 'sharing-club' ),
+				'state'  => __( 'Pick a status.', 'sharing-club' ),
+				'out'    => __( 'That item is checked out or needs repair. Mark it as returned on the Lendings page first.', 'sharing-club' ),
 				'save'   => __( 'The checkout could not be saved. Please try again.', 'sharing-club' ),
 			);
 			$text     = isset( $messages[ $error ] ) ? $messages[ $error ] : __( 'Something went wrong.', 'sharing-club' );
@@ -221,13 +229,24 @@ class TAAS_Loan_Checkout {
 			return;
 		}
 
-		$user = get_userdata( $who );
-		$text = sprintf(
-			/* translators: 1: item name, 2: member name. */
-			__( 'Checked out %1$s to %2$s.', 'sharing-club' ),
-			get_the_title( $done ),
-			$user ? $user->display_name : ''
-		);
+		$user   = get_userdata( $who );
+		$states = TAAS_Loan_Shortcodes::states();
+		if ( 'out' === $state || ! isset( $states[ $state ] ) ) {
+			$text = sprintf(
+				/* translators: 1: item name, 2: member name. */
+				__( 'Checked out %1$s to %2$s.', 'sharing-club' ),
+				get_the_title( $done ),
+				$user ? $user->display_name : ''
+			);
+		} else {
+			$text = sprintf(
+				/* translators: 1: item name, 2: member name, 3: status, e.g. "Returned". */
+				__( 'Saved %1$s for %2$s as "%3$s".', 'sharing-club' ),
+				get_the_title( $done ),
+				$user ? $user->display_name : '',
+				$states[ $state ]
+			);
+		}
 		$type = 'success';
 		if ( null === $team ) {
 			$text .= ' ' . __( 'No emails were sent.', 'sharing-club' );
@@ -283,6 +302,7 @@ class TAAS_Loan_Checkout {
 			'requested' => array(),
 			'in'        => array(),
 			'out'       => array(),
+			'repair'    => array(),
 		);
 		foreach ( $items as $item ) {
 			$loan                        = isset( $loans[ $item->ID ] ) ? $loans[ $item->ID ] : array(
@@ -295,6 +315,7 @@ class TAAS_Loan_Checkout {
 			'requested' => __( 'Requested', 'sharing-club' ),
 			'in'        => __( 'Available', 'sharing-club' ),
 			'out'       => __( 'Checked out (mark as returned first)', 'sharing-club' ),
+			'repair'    => __( 'Damaged needs repair (mark as returned first)', 'sharing-club' ),
 		);
 
 		$today = current_datetime();
@@ -336,7 +357,7 @@ class TAAS_Loan_Checkout {
 											<option value="<?php echo esc_attr( $item->ID ); ?>"
 												<?php echo 'requested' === $status ? 'data-member="' . esc_attr( $loan['user_id'] ) . '"' : ''; ?>
 												<?php selected( $pick_item, $item->ID ); ?>
-												<?php disabled( 'out', $status ); ?>><?php echo esc_html( $text ); ?></option>
+												<?php disabled( in_array( $status, array( 'out', 'repair' ), true ) ); ?>><?php echo esc_html( $text ); ?></option>
 										<?php endforeach; ?>
 									</optgroup>
 								<?php endforeach; ?>
@@ -357,7 +378,7 @@ class TAAS_Loan_Checkout {
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="taas-checkout-lent"><?php esc_html_e( 'Checkout date', 'sharing-club' ); ?></label></th>
+						<th scope="row"><label for="taas-checkout-lent"><?php esc_html_e( 'Pickup date', 'sharing-club' ); ?></label></th>
 						<td><input type="date" id="taas-checkout-lent" name="lent" value="<?php echo esc_attr( $today->format( 'Y-m-d' ) ); ?>" required></td>
 					</tr>
 					<tr>
@@ -367,9 +388,20 @@ class TAAS_Loan_Checkout {
 							<p class="description">
 								<?php
 								/* translators: %d: number of days. */
-								echo esc_html( sprintf( __( 'Starts at %d days from today. Change it if needed.', 'sharing-club' ), self::DEFAULT_DAYS ) );
+								echo esc_html( sprintf( __( 'Set to %d days after the pickup date. Change it if needed.', 'sharing-club' ), self::DEFAULT_DAYS ) );
 								?>
 							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="taas-checkout-state"><?php esc_html_e( 'Status', 'sharing-club' ); ?></label></th>
+						<td>
+							<select id="taas-checkout-state" name="state">
+								<?php foreach ( TAAS_Loan_Shortcodes::states() as $key => $label ) : ?>
+									<option value="<?php echo esc_attr( $key ); ?>" <?php selected( 'out', $key ); ?>><?php echo esc_html( $label ); ?></option>
+								<?php endforeach; ?>
+							</select>
+							<p class="description"><?php esc_html_e( 'Shown as Availability on the Lendings page. Emails are only sent for "Checked Out".', 'sharing-club' ); ?></p>
 						</td>
 					</tr>
 					<tr>
@@ -408,6 +440,35 @@ class TAAS_Loan_Checkout {
 				if ( who ) {
 					member.value = who;
 				}
+			} );
+		}() );
+		</script>
+		<?php
+		self::due_date_script( 'taas-checkout-lent', 'taas-checkout-due' );
+	}
+
+	/**
+	 * When the pickup date changes, set the return date 30 days later.
+	 *
+	 * @param string $lent_id ID of the pickup date field.
+	 * @param string $due_id  ID of the return date field.
+	 */
+	public static function due_date_script( $lent_id, $due_id ) {
+		?>
+		<script>
+		( function () {
+			var lent = document.getElementById( <?php echo wp_json_encode( $lent_id ); ?> );
+			var due = document.getElementById( <?php echo wp_json_encode( $due_id ); ?> );
+			if ( ! lent || ! due ) {
+				return;
+			}
+			lent.addEventListener( 'change', function () {
+				var parts = lent.value.split( '-' );
+				if ( 3 !== parts.length ) {
+					return;
+				}
+				var d = new Date( Date.UTC( +parts[0], parts[1] - 1, +parts[2] + <?php echo (int) self::DEFAULT_DAYS; ?> ) );
+				due.value = d.toISOString().slice( 0, 10 );
 			} );
 		}() );
 		</script>

@@ -28,7 +28,8 @@ class Lending_Table extends WP_List_Table {
     function column_default($item, $column_name){
         switch($column_name){
             case 'availability':
-                return __($item->$column_name, 'sharing-club');
+                $labels = array( 'requested' => __( 'Requested', 'sharing-club' ) ) + TAAS_Loan_Shortcodes::states();
+                return esc_html( $labels[ $item->availability ] );
             default:
                 //return print_r($item,true); //Show the whole array for troubleshooting purposes
                 return $item->$column_name;
@@ -78,6 +79,7 @@ class Lending_Table extends WP_List_Table {
         $actions = array(
             'delete' => __('Delete', 'sharing-club'),
             'return'    => __('Mark as returned', 'sharing-club'),
+            'damaged'   => __('Mark as damaged needs repair', 'sharing-club'),
         );
         return $actions;
     }
@@ -95,10 +97,12 @@ class Lending_Table extends WP_List_Table {
         if ('delete' === $this->current_action()) {
             if (!empty($ids)) {
                 $wpdb->query("DELETE FROM $table_name WHERE comment_ID IN($ids)");
+                $wpdb->query("DELETE FROM {$wpdb->commentmeta} WHERE comment_id IN($ids)");
             }
-        }else if ('return' === $this->current_action()) {
-            if (!empty($ids)) {
-                $wpdb->query("UPDATE $table_name SET `comment_date_gmt` = '".date('Y-m-d H:i:s')."' WHERE comment_ID IN($ids)");
+        }else if (in_array($this->current_action(), array('return', 'damaged'), true)) {
+            $state = 'return' === $this->current_action() ? 'returned' : 'damaged';
+            foreach (array_filter(array_map('intval', explode(',', $ids))) as $id) {
+                TAAS_Loan_Shortcodes::set_state($id, $state);
             }
         }
         
@@ -121,19 +125,44 @@ class Lending_Table extends WP_List_Table {
         $this->_column_headers = array($columns, $hidden, $sortable);
         $this->process_bulk_action();
         
-        $orderby = (!empty($_REQUEST['orderby'])) ? sanitize_key($_REQUEST['orderby']) : 'comment_date_gmt'; //If no sort, default to title
-        $order = (!empty($_REQUEST['order'])) ? sanitize_key($_REQUEST['order']) : 'desc'; //If no order, default to asc
-        
-        $query = "SELECT comment_ID as ID, user_nicename, post_title AS name, comment_agent AS note, DATE_FORMAT(comment_date, '%d/%m/%Y') AS fr_date_start, DATE_FORMAT(comment_date_gmt, '%d/%m/%Y') AS fr_date_end,
-        CASE WHEN comment_date = '0000-00-00' THEN 'requested'
-        WHEN comment_date_gmt > CURRENT_TIMESTAMP OR comment_date_gmt = '0000-00-00' THEN 'na'
-        ELSE 'available' END availability
+        $columns_sql = array(
+            'name'          => 'name',
+            'user_nicename' => 'user_nicename',
+            'fr_date_start' => 'comment_date',
+            'fr_date_end'   => 'comment_date_gmt',
+            'note'          => 'note',
+        );
+        $orderby = (!empty($_REQUEST['orderby'])) ? sanitize_key($_REQUEST['orderby']) : '';
+        $order   = (!empty($_REQUEST['order']) && 'asc' === strtolower($_REQUEST['order'])) ? 'ASC' : 'DESC';
+        $sort    = isset($columns_sql[$orderby]) ? $columns_sql[$orderby] : 'comment_date_gmt';
+
+        $query = $wpdb->prepare("SELECT comment_ID as ID, user_nicename, post_title AS name, comment_agent AS note, comment_date, comment_date_gmt,
+        DATE_FORMAT(comment_date, '%%d/%%m/%%Y') AS fr_date_start, DATE_FORMAT(comment_date_gmt, '%%d/%%m/%%Y') AS fr_date_end, meta.meta_value AS state
         FROM ".$wpdb->comments." AS lending
         LEFT JOIN ".$wpdb->posts." AS objects ON (objects.ID = comment_post_ID)
-        LEFT JOIN ".$wpdb->users." AS users ON (users.ID = user_id) 
-        WHERE post_type = 'shared_item'
-        ORDER BY FIELD(availability, 'requested', 'na', 'available'), $orderby $order";
+        LEFT JOIN ".$wpdb->users." AS users ON (users.ID = user_id)
+        LEFT JOIN ".$wpdb->commentmeta." AS meta ON (meta.comment_id = lending.comment_ID AND meta.meta_key = %s)
+        WHERE post_type = 'shared_item' AND comment_type = 'lending'
+        ORDER BY $sort $order", TAAS_Loan_Shortcodes::STATE_META);
         $data = $wpdb->get_results($query);
+        foreach ($data as $row) {
+            $row->availability = TAAS_Loan_Shortcodes::lending_state($row->comment_date, $row->comment_date_gmt, (string) $row->state);
+        }
+
+        // Requests first, then items out, needing repair, and returned.
+        $rank = array('requested' => 0, 'out' => 1, 'damaged' => 2, 'returned' => 3);
+        if ('availability' === $orderby) {
+            usort($data, function ($a, $b) use ($rank, $order) {
+                $cmp = $rank[$a->availability] - $rank[$b->availability];
+                return 'ASC' === $order ? $cmp : -$cmp;
+            });
+        } elseif ('' === $orderby) {
+            // Keeps the date order within each group.
+            uksort($data, function ($a, $b) use ($data, $rank) {
+                return ($rank[$data[$a]->availability] - $rank[$data[$b]->availability]) ?: ($a - $b);
+            });
+            $data = array_values($data);
+        }
 
         $current_page = $this->get_pagenum();
         $total_items = count($data);

@@ -70,6 +70,36 @@ function scwp_plugin_deactivate() {
 }
 register_deactivation_hook( __FILE__, 'scwp_plugin_deactivate' );
 
+/**
+ * Telescope icon for the admin menu (WordPress recolours it to match the menu).
+ */
+function scwp_menu_icon() {
+    $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><g fill="black">'
+        . '<g transform="rotate(-25 10 8)"><rect x="5" y="6" width="10" height="4" rx="0.5"/><rect x="15.5" y="5.2" width="2.5" height="5.6" rx="0.5"/><rect x="2.2" y="6.8" width="2.3" height="2.4" rx="0.4"/></g>'
+        . '<path d="M9.3 10.4 5 18.6h1.7l3.3-6.2 3.3 6.2H15l-4.3-8.2z"/><rect x="9.3" y="11" width="1.4" height="7.6"/>'
+        . '</g></svg>';
+    return 'data:image/svg+xml;base64,' . base64_encode( $svg );
+}
+
+/**
+ * Keep "Import" at the bottom of the TAAS Loan Program menu.
+ */
+function scwp_import_menu_last() {
+    global $submenu;
+    $parent = 'edit.php?post_type=shared_item';
+    if ( empty( $submenu[ $parent ] ) ) {
+        return;
+    }
+    foreach ( $submenu[ $parent ] as $key => $entry ) {
+        if ( isset( $entry[2] ) && TAAS_VRI_Importer::PAGE === $entry[2] ) {
+            unset( $submenu[ $parent ][ $key ] );
+            $submenu[ $parent ][] = $entry;
+            break;
+        }
+    }
+}
+add_action( 'admin_menu', 'scwp_import_menu_last', PHP_INT_MAX );
+
 function scwp_init() {
     //if ( current_user_can( 'manage_options' ) ) {
         $object = array(
@@ -88,7 +118,7 @@ function scwp_init() {
               // this is the menu label :
               'add_new' => __('Add object', 'sharing-club'),
               ),
-            'menu_icon' => 'dashicons-universal-access-alt',
+            'menu_icon' => scwp_menu_icon(),
             'public' => true,
             'publicly_queryable' => true,
             'has_archive' => true,
@@ -167,8 +197,6 @@ function scwp_display_lending_table(){
 }
 function scwp_display_lending_form(){
     if ( current_user_can( 'manage_options' ) ) {
-        wp_enqueue_style('jquery-ui-css', plugin_dir_url( __FILE__ ) . 'css/jquery-ui.css');
-        wp_enqueue_script( 'scwp-admin', plugin_dir_url( __FILE__ ) . 'js/lending-library-admin.js', array( 'jquery', 'jquery-ui-datepicker' ) );
         require_once plugin_dir_path( __FILE__ ) . 'admin-lending-form-display.php';
     }
 }
