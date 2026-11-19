@@ -103,9 +103,12 @@ class TAAS_Loan_Notify {
 	 * @param WP_User  $user Member.
 	 * @param string[] $to   Recipients.
 	 * @param bool     $test Mark the subject as a test.
+	 * @param string   $kind 'full' (normal), 'text' (plain text only) or
+	 *                       'html' (no Reply-To). The last two are for the email check.
+	 * @param string   $tag  Extra words for the start of the subject.
 	 * @return bool
 	 */
-	private static function send( $post, $user, array $to, $test = false ) {
+	private static function send( $post, $user, array $to, $test = false, $kind = 'full', $tag = '' ) {
 		$member = self::member_contact( $user );
 		$item   = get_the_title( $post );
 
@@ -115,9 +118,13 @@ class TAAS_Loan_Notify {
 			/* translators: %s: email subject. */
 			$subject = sprintf( __( '[Test] %s', 'sharing-club' ), $subject );
 		}
+		if ( $tag ) {
+			$subject = $tag . ' ' . $subject;
+		}
 
-		$headers = array( 'Content-Type: text/html; charset=UTF-8' );
-		if ( is_email( $member['email'] ) ) {
+		$text    = self::email_text( $post, $member );
+		$headers = array( 'Content-Type: ' . ( 'text' === $kind ? 'text/plain' : 'text/html' ) . '; charset=UTF-8' );
+		if ( 'html' !== $kind && is_email( $member['email'] ) ) {
 			// Replying goes straight to the member.
 			$headers[] = 'Reply-To: ' . self::header_safe( $member['name'] ) . ' <' . $member['email'] . '>';
 		}
@@ -129,11 +136,82 @@ class TAAS_Loan_Notify {
 		$failed = static function ( $error ) {
 			self::$last_error = $error->get_error_message();
 		};
+		// A plain-text copy alongside the HTML, which spam filters expect.
+		$alt = static function ( $phpmailer ) use ( $text ) {
+			$phpmailer->AltBody = $text; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- PHPMailer property.
+		};
 		self::$last_error = '';
 		add_action( 'wp_mail_failed', $failed );
-		$sent = wp_mail( $to, wp_specialchars_decode( $subject, ENT_QUOTES ), self::email_html( $post, $member ), $headers );
+		if ( 'text' !== $kind ) {
+			add_action( 'phpmailer_init', $alt );
+		}
+		$body = 'text' === $kind ? $text : self::email_html( $post, $member );
+		$sent = wp_mail( $to, wp_specialchars_decode( $subject, ENT_QUOTES ), $body, $headers );
+		remove_action( 'phpmailer_init', $alt );
 		remove_action( 'wp_mail_failed', $failed );
 		return $sent;
+	}
+
+	/**
+	 * The email as plain text.
+	 *
+	 * @param WP_Post $post   Item.
+	 * @param array   $member From member_contact().
+	 * @return string
+	 */
+	private static function email_text( $post, array $member ) {
+		$none  = __( 'Not on file', 'sharing-club' );
+		$lines = array(
+			/* translators: 1: member name, 2: item name. */
+			sprintf( __( '%1$s would like to borrow %2$s.', 'sharing-club' ), $member['name'], wp_specialchars_decode( get_the_title( $post ), ENT_QUOTES ) ),
+			'',
+			__( 'Item', 'sharing-club' ) . ': ' . get_permalink( $post ),
+			'',
+			__( 'Name', 'sharing-club' ) . ': ' . $member['name'],
+			__( 'Email', 'sharing-club' ) . ': ' . $member['email'],
+			__( 'Mobile', 'sharing-club' ) . ': ' . ( '' !== $member['mobile'] ? $member['mobile'] : $none ),
+			__( 'Home', 'sharing-club' ) . ': ' . ( '' !== $member['home'] ? $member['home'] : $none ),
+			__( 'Username', 'sharing-club' ) . ': ' . $member['username'],
+			'',
+			__( 'Open the Loan Portal', 'sharing-club' ) . ': ' . self::portal_url(),
+		);
+		return implode( "\n", $lines ) . "\n";
+	}
+
+	/**
+	 * Send four versions of the test email, from as simple as WP Mail SMTP's
+	 * own test up to the real thing, to see which ones arrive.
+	 *
+	 * @param WP_User $user Member to show in the email.
+	 * @return array<string,bool> Subject label => whether it was handed off.
+	 */
+	private static function send_check( $user ) {
+		$items = get_posts(
+			array(
+				'post_type'      => 'shared_item',
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+			)
+		);
+		if ( ! $items ) {
+			return array();
+		}
+		$to      = self::manager_emails();
+		$results = array();
+
+		$label             = __( 'Check 1 of 4: basic', 'sharing-club' );
+		$results[ $label ] = wp_mail( $to, $label, __( 'A basic test from the TAAS Loan Program. No formatting, links or reply address.', 'sharing-club' ) );
+
+		$label             = __( 'Check 2 of 4: plain text', 'sharing-club' );
+		$results[ $label ] = self::send( $items[0], $user, $to, true, 'text', $label . ' -' );
+
+		$label             = __( 'Check 3 of 4: formatted, no reply address', 'sharing-club' );
+		$results[ $label ] = self::send( $items[0], $user, $to, true, 'html', $label . ' -' );
+
+		$label             = __( 'Check 4 of 4: the real email', 'sharing-club' );
+		$results[ $label ] = self::send( $items[0], $user, $to, true, 'full', $label . ' -' );
+
+		return $results;
 	}
 
 	/**
@@ -602,8 +680,23 @@ class TAAS_Loan_Notify {
 			$user   = $admins ? $admins[0] : false;
 		}
 
+		$to = implode( ', ', self::manager_emails() );
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- the secret key is the check.
+		if ( ! empty( $_GET['check'] ) && $user ) {
+			$list = '';
+			foreach ( self::send_check( $user ) as $label => $ok ) {
+				$list .= '<li>' . esc_html( $label ) . ': ' . ( $ok ? esc_html__( 'handed off', 'sharing-club' ) : esc_html__( 'failed', 'sharing-club' ) ) . '</li>';
+			}
+			$intro = sprintf(
+				/* translators: %s: recipient address(es). */
+				__( 'Sent four test emails to %s. Wait a few minutes, check the inbox and spam, and note which ones arrived:', 'sharing-club' ),
+				$to
+			);
+			wp_die( '<p>' . esc_html( $intro ) . '</p><ul>' . $list . '</ul>', esc_html__( 'Email check', 'sharing-club' ), array( 'response' => 200 ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $list is escaped above.
+		}
+
 		$result = self::send_test( $user );
-		$to     = implode( ', ', self::manager_emails() );
 		if ( 'sent' === $result ) {
 			/* translators: 1: recipient address(es), 2: sender address. */
 			$message = sprintf( __( 'Test email sent to %1$s from %2$s. If it doesn\'t arrive in a few minutes, check the spam folder. If it\'s not there either, the web host isn\'t delivering the site\'s email and an SMTP plugin is needed.', 'sharing-club' ), $to, self::from_email() );
@@ -615,7 +708,12 @@ class TAAS_Loan_Notify {
 		} else {
 			$message = __( 'No user account found to show as the member.', 'sharing-club' );
 		}
-		wp_die( '<p>' . esc_html( $message ) . '</p>', esc_html__( 'Test email', 'sharing-club' ), array( 'response' => 200 ) );
+		$check = '';
+		if ( 'sent' === $result ) {
+			$check = '<p><a href="' . esc_url( add_query_arg( 'check', 1, self::test_link_url() ) ) . '">'
+				. esc_html__( 'Email not arriving? Wait a minute, then run the email check (sends four simpler versions).', 'sharing-club' ) . '</a></p>';
+		}
+		wp_die( '<p>' . esc_html( $message ) . '</p>' . $check, esc_html__( 'Test email', 'sharing-club' ), array( 'response' => 200 ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $check is escaped above.
 	}
 
 	/**
