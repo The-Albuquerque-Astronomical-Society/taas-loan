@@ -183,7 +183,8 @@ class TAAS_Loan_Manual {
 					<tr><th scope="row"><?php $a( $checkout ); ?></th><td>Check an item out to a member and send the emails.</td></tr>
 					<tr><th scope="row"><?php $a( $add ); ?></th><td>Add a new item to the program.</td></tr>
 					<tr><th scope="row"><?php $a( $cats ); ?></th><td>The groups items are sorted into on the website (Telescopes, Eyepieces, and so on).</td></tr>
-					<tr><th scope="row">Restrict Access, Re-Order</th><td>These come from other plugins on the site, not the TAAS Loan Program. Ask the site admin before changing them.</td></tr>
+					<tr><th scope="row">Restrict Access</th><td>From the Restrict Content Pro plugin, not the TAAS Loan Program. Sets which membership levels and roles can see loan items. Ask the site admin before changing it.</td></tr>
+					<tr><th scope="row">Re-Order</th><td>From the Post Types Order plugin. Drag items up and down to set a custom order, then click <strong>Update</strong>.</td></tr>
 					<tr><th scope="row"><?php $a( $import ); ?></th><td>Copies equipment from the old Vik Rent Items system. Only needed once (see <a href="#items">Adding and editing items</a>).</td></tr>
 					<tr><th scope="row">Manual</th><td>This page.</td></tr>
 				</tbody>
