@@ -28,12 +28,12 @@ It's based on the [Sharing Club](https://wordpress.org/plugins/sharing-club/) pl
 - Browse the equipment by category (Telescopes, Premium Eyepieces, Accessories)
 - See whether an item is available or already requested
 - Request an item from its page
-- Rate and review equipment after using it (optional)
+- Rate and review equipment they've borrowed (optional)
 
 **For loan volunteers (admins)**
 - Add equipment with photos, descriptions and categories
 - Get an email when a member requests an item
-- See every loan: who borrowed what, when it went out, and when it came back
+- See every loan: who borrowed what, when it went out, when it's due back, and whether it's out, returned or damaged
 - Add private notes to an item (e.g. serial number, storage spot) or to a loan (e.g. "returned with missing lens cap")
 
 ## Requirements
@@ -44,8 +44,8 @@ It's based on the [Sharing Club](https://wordpress.org/plugins/sharing-club/) pl
 
 ## Installation
 
-1. Download or clone this repo into `/wp-content/plugins/taas-loan`.
-2. In the WordPress admin, go to **Plugins** and activate **TAAS Loan Program**.
+1. Download `taas-loan-x.y.z.zip` from the [latest release](https://github.com/The-Albuquerque-Astronomical-Society/taas-loan/releases/latest).
+2. In the WordPress admin, go to **Plugins > Add New > Upload Plugin**, upload the zip, and activate **TAAS Loan Program**. (To update, upload the new zip and choose **Replace current with uploaded**.)
 3. Go to **Settings > TAAS Loan Program** and choose your options (see below).
 
 ## Setting up the equipment list
@@ -140,10 +140,12 @@ On the command line: `wp taas-loan reset` (add `--keep-pictures` to keep the pic
 ## Handling loans
 
 1. A logged-in member clicks the request button on an item. The Loan Manager gets an email with the item, the member's name, email, mobile and home phone, and an **Open the Loan Portal** button, and the item shows as **requested**. Phone numbers come from the member's Participants Database record with the same email as their WordPress account. Replying to the email goes straight to the member. The member also gets a confirmation email saying the Loan Director will be in touch.
-2. When the member picks it up, open **TAAS Loan Program > Check out** (or click **Check it out to them** in the request email). Pick the item and the member, set the return date, and click **Check out**. The loan team (the Loan Manager email) and the member each get an email with the return date. Members who didn't request online can be checked out the same way.
-3. When it comes back, tick it in the list and choose **Mark as returned**. Edit it to add a note if anything's wrong (e.g. "missing lens cap"). The item shows as **available** again.
+2. When the member picks it up, set the item's **Availability** to **Checked Out** on **All objects** and fill in the small box, or use **TAAS Loan Program > Check out** (or the **Check it out to them** button in the request email). The return date is set 30 days after pickup. The loan team (the Loan Manager email) and the member each get an email with the return date. Members who didn't request online can be checked out the same way.
+3. When it comes back, set it to **Returned** (on All objects, or **Mark as returned** on Lendings). If something's wrong, use **Damaged needs repair** instead: the website shows **Being repaired** and nobody can borrow it until it's marked Returned. Add a note on the loan (e.g. "missing lens cap") from Lendings > Edit.
 
-> **Note:** dates currently use the `dd/mm/yyyy` format (day first).
+The full step-by-step guide is in the admin at **TAAS Loan Program > Manual**.
+
+> **Note:** the Lendings list shows dates day first (`dd/mm/yyyy`).
 
 ## Planned features
 
@@ -178,8 +180,9 @@ Equipment items are a WordPress custom post type (`shared_item`) with their own 
 | --- | --- |
 | Member | `user_id` |
 | Item | `comment_post_ID` |
-| Lending date | `comment_date` |
+| Pickup date | `comment_date` |
 | Return date | `comment_date_gmt` |
+| Status (`out`, `returned`, `damaged`) | comment meta `taas_loan_status` |
 | Review | `comment_content` |
 | Volunteer notes | `comment_agent` |
 | Rating | `comment_karma` |
