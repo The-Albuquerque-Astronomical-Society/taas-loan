@@ -3,8 +3,9 @@
  * "Availability" dropdown on TAAS Loan Program > All objects, with the same
  * choices as the Lendings page: Checked Out, Returned, Damaged needs repair.
  *
- * Changing it updates the item's latest lending. "Checked Out" needs a member
- * and dates, so it opens the Check out page with the item picked.
+ * Changing it updates the item's latest lending. "Checked Out" opens a small
+ * box to pick the member and dates (with a calendar); saving it records the
+ * loan on the Lendings page and sends the same emails as the Check out page.
  *
  * @package TAAS_Loan_Program
  */
@@ -104,13 +105,14 @@ class TAAS_Loan_Availability {
 		}
 
 		printf(
-			'<select class="taas-availability" data-item="%1$d" data-current="%2$s" aria-label="%3$s">',
+			'<select class="taas-availability" data-item="%1$d" data-current="%2$s" data-member="%3$d" aria-label="%4$s">',
 			(int) $item_id,
 			esc_attr( $current ),
+			$requested ? (int) $loan['user_id'] : 0,
 			esc_attr__( 'Availability', 'sharing-club' )
 		);
 		foreach ( $options as $key => $label ) {
-			// A request can only be checked out (on the Check out page).
+			// A request can only be checked out.
 			$off = $requested && 'out' !== $key;
 			printf(
 				'<option value="%1$s"%2$s%3$s>%4$s</option>',
@@ -121,6 +123,7 @@ class TAAS_Loan_Availability {
 			);
 		}
 		echo '</select> <span class="taas-availability-msg" aria-live="polite"></span>';
+		echo '<div class="taas-availability-box"></div>';
 	}
 
 	/**
@@ -148,10 +151,30 @@ class TAAS_Loan_Availability {
 			if ( 'repair' === $loan['status'] ) {
 				wp_send_json_error( __( 'Mark it as Returned first.', 'sharing-club' ) );
 			}
-			// A checkout needs a member and dates.
+			$user_id = isset( $_POST['member'] ) ? absint( $_POST['member'] ) : 0;
+			$result  = TAAS_Loan_Checkout::save(
+				$item_id,
+				$user_id,
+				isset( $_POST['lent'] ) ? sanitize_text_field( wp_unslash( $_POST['lent'] ) ) : '',
+				isset( $_POST['due'] ) ? sanitize_text_field( wp_unslash( $_POST['due'] ) ) : '',
+				isset( $_POST['notes'] ) ? sanitize_text_field( wp_unslash( $_POST['notes'] ) ) : '',
+				'out',
+				! empty( $_POST['notify'] )
+			);
+			if ( isset( $result['error'] ) ) {
+				wp_send_json_error( TAAS_Loan_Checkout::error_message( $result['error'] ) );
+			}
+			$user = get_userdata( $user_id );
 			wp_send_json_success(
 				array(
-					'redirect' => TAAS_Loan_Checkout::page_url( $item_id, 'requested' === $loan['status'] ? $loan['user_id'] : 0 ),
+					'message' => sprintf(
+						/* translators: %s: member name. */
+						__( 'Checked out to %s.', 'sharing-club' ),
+						$user->display_name
+					) . ' ' . TAAS_Loan_Checkout::email_message(
+						isset( $result['sent_team'] ) ? $result['sent_team'] : null,
+						isset( $result['sent_member'] ) ? $result['sent_member'] : null
+					),
 				)
 			);
 		}
@@ -197,53 +220,217 @@ class TAAS_Loan_Availability {
 	}
 
 	/**
-	 * Save the dropdown as soon as it changes.
+	 * The checkout box (moved into a row when "Checked Out" is picked) and
+	 * the script that saves the dropdown.
 	 */
 	public static function script() {
 		$screen = get_current_screen();
 		if ( ! $screen || 'edit-shared_item' !== $screen->id || ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
+		$users = get_users(
+			array(
+				'orderby' => 'display_name',
+				'order'   => 'ASC',
+				'fields'  => array( 'ID', 'display_name', 'user_email' ),
+			)
+		);
+		$days  = TAAS_Loan_Checkout::DEFAULT_DAYS;
+		$today = current_datetime();
 		?>
+		<style>
+			.taas-availability-box .taas-checkout-box { margin-top: 8px; padding: 10px 12px; background: #f6f7f7; border: 1px solid #dcdcde; border-radius: 4px; max-width: 320px; }
+			.taas-checkout-box p { margin: 0 0 8px; }
+			.taas-checkout-box label { display: block; font-weight: 600; }
+			.taas-checkout-box label.taas-inline { font-weight: normal; }
+			.taas-checkout-box select, .taas-checkout-box input[type="text"], .taas-checkout-box input[type="date"] { width: 100%; max-width: 100%; }
+		</style>
+		<div id="taas-checkout-box-template" hidden>
+			<div class="taas-checkout-box">
+				<p><label><?php esc_html_e( 'Member', 'sharing-club' ); ?>
+					<select data-field="member">
+						<option value=""><?php esc_html_e( 'Choose a member…', 'sharing-club' ); ?></option>
+						<?php foreach ( $users as $user ) : ?>
+							<option value="<?php echo esc_attr( $user->ID ); ?>"><?php echo esc_html( $user->display_name . ' (' . $user->user_email . ')' ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</label></p>
+				<p><label><?php esc_html_e( 'Pickup date', 'sharing-club' ); ?>
+					<input type="date" data-field="lent">
+				</label></p>
+				<p><label><?php esc_html_e( 'Return date', 'sharing-club' ); ?>
+					<input type="date" data-field="due">
+				</label></p>
+				<p><label><?php esc_html_e( 'Notes', 'sharing-club' ); ?>
+					<input type="text" data-field="notes">
+				</label></p>
+				<p><label class="taas-inline"><input type="checkbox" data-field="notify" value="1" checked> <?php esc_html_e( 'Email the member and the loan team', 'sharing-club' ); ?></label></p>
+				<p>
+					<button type="button" class="button button-primary" data-do="save"><?php esc_html_e( 'Check out', 'sharing-club' ); ?></button>
+					<button type="button" class="button" data-do="cancel"><?php esc_html_e( 'Cancel', 'sharing-club' ); ?></button>
+				</p>
+			</div>
+		</div>
 		<script>
 		( function () {
 			var url = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
 			var nonce = <?php echo wp_json_encode( wp_create_nonce( self::ACTION ) ); ?>;
-			var text = <?php echo wp_json_encode( array( 'saving' => __( 'Saving…', 'sharing-club' ), 'saved' => __( 'Saved', 'sharing-club' ), 'failed' => __( 'Could not save. Please try again.', 'sharing-club' ) ) ); ?>;
-			document.addEventListener( 'change', function ( e ) {
-				var select = e.target;
-				if ( ! select.classList || ! select.classList.contains( 'taas-availability' ) ) {
+			var days = <?php echo (int) $days; ?>;
+			var today = <?php echo wp_json_encode( $today->format( 'Y-m-d' ) ); ?>;
+			var text = <?php echo wp_json_encode( array( 'saving' => __( 'Saving…', 'sharing-club' ), 'saved' => __( 'Saved', 'sharing-club' ), 'failed' => __( 'Could not save. Please try again.', 'sharing-club' ), 'repair' => __( 'Mark it as Returned first.', 'sharing-club' ) ) ); ?>;
+			var template = document.getElementById( 'taas-checkout-box-template' );
+			var open = null; // The select whose box is showing.
+
+			function plusDays( ymd ) {
+				var p = ymd.split( '-' );
+				if ( 3 !== p.length ) {
+					return '';
+				}
+				return new Date( Date.UTC( +p[0], p[1] - 1, +p[2] + days ) ).toISOString().slice( 0, 10 );
+			}
+
+			function msgFor( select ) {
+				return select.parentNode.querySelector( '.taas-availability-msg' );
+			}
+
+			function closeBox( revert ) {
+				if ( ! open ) {
 					return;
 				}
-				var msg = select.nextElementSibling;
+				if ( revert ) {
+					open.value = open.getAttribute( 'data-current' );
+				}
+				open.parentNode.querySelector( '.taas-availability-box' ).innerHTML = '';
+				open = null;
+			}
+
+			function send( select, extra, done ) {
 				var body = new FormData();
 				body.append( 'action', <?php echo wp_json_encode( self::ACTION ); ?> );
 				body.append( '_ajax_nonce', nonce );
 				body.append( 'item', select.getAttribute( 'data-item' ) );
 				body.append( 'state', select.value );
-				select.disabled = true;
-				msg.textContent = text.saving;
+				Object.keys( extra ).forEach( function ( k ) {
+					body.append( k, extra[ k ] );
+				} );
 				fetch( url, { method: 'POST', body: body, credentials: 'same-origin' } )
 					.then( function ( r ) { return r.json(); } )
-					.then( function ( res ) {
-						if ( res && res.success && res.data && res.data.redirect ) {
-							window.location.href = res.data.redirect;
-							return;
-						}
-						if ( res && res.success ) {
-							select.setAttribute( 'data-current', select.value );
-							msg.textContent = text.saved;
-						} else {
-							select.value = select.getAttribute( 'data-current' );
-							msg.textContent = ( res && typeof res.data === 'string' ) ? res.data : text.failed;
-						}
-						select.disabled = false;
-					} )
-					.catch( function () {
-						select.value = select.getAttribute( 'data-current' );
-						msg.textContent = text.failed;
-						select.disabled = false;
-					} );
+					.then( done )
+					.catch( function () { done( null ); } );
+			}
+
+			function saved( select, message ) {
+				select.setAttribute( 'data-current', select.value );
+				// Once checked out, a request is no longer a request.
+				Array.prototype.forEach.call( select.options, function ( o ) {
+					if ( 'requested' === o.value ) {
+						o.remove();
+					} else {
+						o.disabled = false;
+					}
+				} );
+				msgFor( select ).textContent = message || text.saved;
+			}
+
+			function openBox( select ) {
+				closeBox( true );
+				var holder = select.parentNode.querySelector( '.taas-availability-box' );
+				holder.innerHTML = template.innerHTML;
+				var box = holder.firstElementChild;
+				var lent = box.querySelector( '[data-field="lent"]' );
+				var due = box.querySelector( '[data-field="due"]' );
+				var member = box.querySelector( '[data-field="member"]' );
+				var who = select.getAttribute( 'data-member' );
+				if ( who && '0' !== who ) {
+					member.value = who;
+				}
+				lent.value = today;
+				due.value = plusDays( today );
+				lent.addEventListener( 'change', function () {
+					var d = plusDays( lent.value );
+					if ( d ) {
+						due.value = d;
+					}
+				} );
+				open = select;
+				msgFor( select ).textContent = '';
+				member.focus();
+			}
+
+			document.addEventListener( 'click', function ( e ) {
+				var button = e.target.closest ? e.target.closest( '.taas-checkout-box [data-do]' ) : null;
+				if ( ! button || ! open ) {
+					return;
+				}
+				if ( 'cancel' === button.getAttribute( 'data-do' ) ) {
+					closeBox( true );
+					return;
+				}
+				var select = open;
+				var box = button.closest( '.taas-checkout-box' );
+				var field = function ( n ) { return box.querySelector( '[data-field="' + n + '"]' ); };
+				var msg = msgFor( select );
+				button.disabled = true;
+				msg.textContent = text.saving;
+				send( select, {
+					member: field( 'member' ).value,
+					lent: field( 'lent' ).value,
+					due: field( 'due' ).value,
+					notes: field( 'notes' ).value,
+					notify: field( 'notify' ).checked ? '1' : ''
+				}, function ( res ) {
+					if ( res && res.success ) {
+						closeBox( false );
+						saved( select, res.data && res.data.message );
+					} else {
+						button.disabled = false;
+						msg.textContent = ( res && typeof res.data === 'string' ) ? res.data : text.failed;
+					}
+				} );
+			} );
+
+			// Enter in the box checks out, instead of submitting the list's form.
+			document.addEventListener( 'keydown', function ( e ) {
+				if ( 'Enter' === e.key && e.target.closest && e.target.closest( '.taas-checkout-box' ) && 'BUTTON' !== e.target.tagName ) {
+					e.preventDefault();
+					e.target.closest( '.taas-checkout-box' ).querySelector( '[data-do="save"]' ).click();
+				}
+			} );
+
+			document.addEventListener( 'change', function ( e ) {
+				var select = e.target;
+				if ( ! select.classList || ! select.classList.contains( 'taas-availability' ) ) {
+					return;
+				}
+				var current = select.getAttribute( 'data-current' );
+				if ( 'out' === select.value ) {
+					if ( 'out' === current ) {
+						closeBox( false );
+						return;
+					}
+					if ( 'damaged' === current ) {
+						select.value = current;
+						msgFor( select ).textContent = text.repair;
+						return;
+					}
+					openBox( select );
+					return;
+				}
+				if ( open === select ) {
+					closeBox( false );
+				}
+				var msg = msgFor( select );
+				select.disabled = true;
+				msg.textContent = text.saving;
+				send( select, {}, function ( res ) {
+					select.disabled = false;
+					if ( res && res.success ) {
+						saved( select );
+					} else {
+						select.value = current;
+						msg.textContent = ( res && typeof res.data === 'string' ) ? res.data : text.failed;
+					}
+				} );
 			} );
 		}() );
 		</script>
