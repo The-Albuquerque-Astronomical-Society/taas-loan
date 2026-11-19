@@ -330,6 +330,9 @@ require_once plugin_dir_path( __FILE__ ) . 'loan-notify.php';
 // CHECK OUT AN ITEM
 require_once plugin_dir_path( __FILE__ ) . 'loan-checkout.php';
 
+// AVAILABILITY DROPDOWN ON ALL OBJECTS
+require_once plugin_dir_path( __FILE__ ) . 'loan-availability.php';
+
 // DELETE ALL DATA
 require_once plugin_dir_path( __FILE__ ) . 'reset-data.php';
 
