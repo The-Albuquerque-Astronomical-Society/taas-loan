@@ -128,21 +128,21 @@ class Lending_Table extends WP_List_Table {
         $columns_sql = array(
             'name'          => 'name',
             'user_nicename' => 'user_nicename',
-            'fr_date_start' => 'comment_date',
-            'fr_date_end'   => 'comment_date_gmt',
+            'fr_date_start' => 'lending.comment_date',
+            'fr_date_end'   => 'lending.comment_date_gmt',
             'note'          => 'note',
         );
         $orderby = (!empty($_REQUEST['orderby'])) ? sanitize_key($_REQUEST['orderby']) : '';
         $order   = (!empty($_REQUEST['order']) && 'asc' === strtolower($_REQUEST['order'])) ? 'ASC' : 'DESC';
-        $sort    = isset($columns_sql[$orderby]) ? $columns_sql[$orderby] : 'comment_date_gmt';
+        $sort    = isset($columns_sql[$orderby]) ? $columns_sql[$orderby] : 'lending.comment_date_gmt';
 
-        $query = $wpdb->prepare("SELECT comment_ID as ID, user_nicename, post_title AS name, comment_agent AS note, comment_date, comment_date_gmt,
-        DATE_FORMAT(comment_date, '%%d/%%m/%%Y') AS fr_date_start, DATE_FORMAT(comment_date_gmt, '%%d/%%m/%%Y') AS fr_date_end, meta.meta_value AS state
+        $query = $wpdb->prepare("SELECT lending.comment_ID AS ID, users.user_nicename, objects.post_title AS name, lending.comment_agent AS note, lending.comment_date, lending.comment_date_gmt,
+        DATE_FORMAT(lending.comment_date, '%%d/%%m/%%Y') AS fr_date_start, DATE_FORMAT(lending.comment_date_gmt, '%%d/%%m/%%Y') AS fr_date_end, meta.meta_value AS state
         FROM ".$wpdb->comments." AS lending
-        LEFT JOIN ".$wpdb->posts." AS objects ON (objects.ID = comment_post_ID)
-        LEFT JOIN ".$wpdb->users." AS users ON (users.ID = user_id)
+        LEFT JOIN ".$wpdb->posts." AS objects ON (objects.ID = lending.comment_post_ID)
+        LEFT JOIN ".$wpdb->users." AS users ON (users.ID = lending.user_id)
         LEFT JOIN ".$wpdb->commentmeta." AS meta ON (meta.comment_id = lending.comment_ID AND meta.meta_key = %s)
-        WHERE post_type = 'shared_item' AND comment_type = 'lending'
+        WHERE objects.post_type = 'shared_item' AND lending.comment_type = 'lending'
         ORDER BY $sort $order", TAAS_Loan_Shortcodes::STATE_META);
         $data = $wpdb->get_results($query);
         foreach ($data as $row) {
