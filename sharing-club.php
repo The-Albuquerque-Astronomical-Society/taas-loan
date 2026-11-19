@@ -82,23 +82,50 @@ function scwp_menu_icon() {
 }
 
 /**
- * Keep "Import" at the bottom of the TAAS Loan Program menu.
+ * Put the TAAS Loan Program menu in a sensible order: everyday loan work
+ * first, then the catalogue, then other plugins' items, then Import.
+ *
+ * Runs on the 'custom_menu_order' filter, which WordPress applies after every
+ * plugin has added its menu items, so nothing gets added after we sort.
+ *
+ * @param bool $custom Passed through unchanged.
+ * @return bool
  */
-function scwp_import_menu_last() {
+function scwp_sort_menu( $custom ) {
     global $submenu;
     $parent = 'edit.php?post_type=shared_item';
     if ( empty( $submenu[ $parent ] ) ) {
-        return;
+        return $custom;
     }
-    foreach ( $submenu[ $parent ] as $key => $entry ) {
-        if ( isset( $entry[2] ) && TAAS_VRI_Importer::PAGE === $entry[2] ) {
-            unset( $submenu[ $parent ][ $key ] );
-            $submenu[ $parent ][] = $entry;
-            break;
+    // Known items, in order. Anything else (other plugins) goes before Import.
+    $order = array(
+        'edit.php?post_type=shared_item'     => 10,
+        'display_lending_table'              => 20,
+        TAAS_Loan_Checkout::PAGE             => 30,
+        'post-new.php?post_type=shared_item' => 40,
+        'taxonomy=shared_item_category'      => 50,
+        TAAS_VRI_Importer::PAGE              => 90,
+    );
+    $rows = array();
+    $n    = 0;
+    foreach ( $submenu[ $parent ] as $entry ) {
+        $slug = isset( $entry[2] ) ? $entry[2] : '';
+        $rank = 60;
+        foreach ( $order as $match => $value ) {
+            if ( $slug === $match || ( 0 === strpos( $match, 'taxonomy=' ) && false !== strpos( $slug, $match ) ) ) {
+                $rank = $value;
+                break;
+            }
         }
+        $rows[] = array( $rank, $n++, $entry );
     }
+    usort( $rows, function ( $a, $b ) {
+        return ( $a[0] - $b[0] ) ?: ( $a[1] - $b[1] );
+    } );
+    $submenu[ $parent ] = array_column( $rows, 2 );
+    return $custom;
 }
-add_action( 'admin_menu', 'scwp_import_menu_last', PHP_INT_MAX );
+add_filter( 'custom_menu_order', 'scwp_sort_menu', PHP_INT_MAX );
 
 function scwp_init() {
     //if ( current_user_can( 'manage_options' ) ) {

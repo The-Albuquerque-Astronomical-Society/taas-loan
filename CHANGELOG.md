@@ -28,7 +28,7 @@ All notable changes to this project are listed here.
 - Lending form (Lendings > Edit) no longer has Reviews or Rating. It has a **Pickup date**, a **Return date** that fills in 30 days later, and a **Status**: Checked Out, Returned, or Damaged needs repair. The Check out page has the same Status and 30-day return date.
 - The **Availability** column on the Lendings page now shows that Status. New bulk action **Mark as damaged needs repair**.
 - Damaged items show **Being repaired** on the website and can't be requested or checked out until marked Returned.
-- The admin menu now has a telescope icon, and **Import** is at the bottom of the menu.
+- The admin menu now has a telescope icon and a clearer order: All objects, Lendings, Check out, Add object, Categories, other plugins' items (Restrict Access, Re-Order), then Import at the bottom.
 - **All objects** has an **Availability** dropdown on each unit (Checked Out, Returned, Damaged needs repair) that saves as soon as it changes. Picking Checked Out opens a small box right there to pick the member and the pickup and return dates (with a calendar, return set 30 days out); saving it adds the loan to Lendings and emails the member and the loan team, just like the Check out page.
 
 ## [1.3.1] - 2022-12-02
