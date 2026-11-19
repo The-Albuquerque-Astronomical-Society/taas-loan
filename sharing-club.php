@@ -83,7 +83,7 @@ function scwp_menu_icon() {
 
 /**
  * Put the TAAS Loan Program menu in a sensible order: everyday loan work
- * first, then the catalogue, then other plugins' items, then Import.
+ * first, then the catalogue, then other plugins' items, then Import and the Manual.
  *
  * Runs on the 'custom_menu_order' filter, which WordPress applies after every
  * plugin has added its menu items, so nothing gets added after we sort.
@@ -101,10 +101,11 @@ function scwp_sort_menu( $custom ) {
     $order = array(
         'edit.php?post_type=shared_item'     => 10,
         'display_lending_table'              => 20,
-        TAAS_Loan_Checkout::PAGE             => 30,
+        'taas_loan_checkout'                 => 30,
         'post-new.php?post_type=shared_item' => 40,
         'taxonomy=shared_item_category'      => 50,
-        TAAS_VRI_Importer::PAGE              => 90,
+        'taas-vri-import'                    => 90,
+        'taas_loan_manual'                   => 95,
     );
     $rows = array();
     $n    = 0;
@@ -359,6 +360,9 @@ require_once plugin_dir_path( __FILE__ ) . 'loan-checkout.php';
 
 // AVAILABILITY DROPDOWN ON ALL OBJECTS
 require_once plugin_dir_path( __FILE__ ) . 'loan-availability.php';
+
+// MANUAL PAGE
+require_once plugin_dir_path( __FILE__ ) . 'loan-manual.php';
 
 // DELETE ALL DATA
 require_once plugin_dir_path( __FILE__ ) . 'reset-data.php';
