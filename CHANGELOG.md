@@ -18,7 +18,7 @@ All notable changes to this project are listed here.
 - Security: members can only review their own loans (before, the review form could change any comment on the site), and an item that's already out can't be requested again.
 - Added **Delete all data** at the bottom of Settings > TAAS Loan Program (and `wp taas-loan reset`) to start over.
 - Loan requests now send the Loan Manager a clean, professional email: who asked, for which item, their email, mobile and home phone (looked up in Participants Database by their WordPress account email), and an **Open the Loan Portal** button. Replying goes straight to the member. Set the **Loan Manager email**, pick the phone fields, and **Send test email** in Settings > TAAS Loan Program.
-- Request emails now come from "TAAS Loan Program" at a real address on the site's domain (new **Send emails from** setting), with a matching return address so Gmail is more likely to accept them.
+- Request emails now come from "TAAS Loan Program" at a real address on the site's domain (new **Send emails from** setting). The return address is left to the host or a mail plugin (like WP Mail SMTP), since setting it ourselves got emails lost.
 - New **Private test link** in settings: bookmark it to send a test email without logging in. The page says whether it worked and, if not, why.
 
 ## [1.3.1] - 2022-12-02
